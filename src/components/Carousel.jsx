@@ -24,7 +24,7 @@ const FRIC    = 0.92    // 관성 감쇠율 (마우스 놓은 후 서서히 멈�
 const SENS    = 0.005   // 드래그 px → offset 변환 감도
 
 const SPACING = 255     // 카드 간 수평 간격 px
-const MAX_ROT = 18      // 옆 카드 최대 rotateY 각도 (살짝만)
+const MAX_ROT = 12      // 옆 카드 최대 rotateY 각도
 const DEPTH   = 45      // 옆 카드 translateZ 음수값 (카드당)
 
 /* offset에 따른 3D 스타일 계산 */
@@ -69,7 +69,13 @@ export default function Carousel() {
       target += vel
       lastX = x
     }
-    const onUp = () => { drag = false }
+    const onUp = () => {
+      drag = false
+      // 관성이 자연스럽게 멈출 위치 예측: vel / (1 - FRIC) = 등비수열 합
+      const projected = offset + vel / (1 - FRIC)
+      target = Math.round(projected)
+      vel    = 0
+    }
 
     wrap.addEventListener('mousedown',  onDown)
     wrap.addEventListener('touchstart', onDown, { passive: true })
@@ -81,8 +87,8 @@ export default function Carousel() {
     let raf = null
 
     function tick() {
-      /* 관성 적용 */
-      if (!drag) { vel *= FRIC; target += vel }
+      /* 드래그 중일 때만 관성 누적 (놓는 순간 snap target 고정) */
+      if (!drag) { vel = 0 }
 
       /* 부드러운 보간 */
       offset += (target - offset) * EASE
