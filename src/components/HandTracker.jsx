@@ -411,6 +411,7 @@ export default function HandTracker() {
             }
             cardGrabLastX       = mx
             handState.cardGrabX = mx
+            handState.cardGrabY = grabInfo.midY   // Y는 미러 불필요
           } else {
             handState.cardGrabDx = 0  // grace period 중 이동 없음
           }
