@@ -9,20 +9,23 @@ const IMAGES = [
 ]
 const FALLBACKS = ['#d0d0d0', '#9aab98', '#c8bfb0', '#b8c0b8']
 
-const SPEED   = 40   // px/sec
-const SPACING = 325  // center-to-center px
-const BOTTOM_PAD = 30 // px from container bottom
+const SPEED      = 40   // px/sec
+const SPACING    = 295  // center-to-center px
+const HALF_MAX   = 150  // half of largest card + buffer (off-screen threshold)
+const BOTTOM_PAD = 30   // px from container bottom
 
 /*
- * 좌우 대칭 — dist ±1 동일, dist ±2 동일
- * index: 0=-2, 1=-1, 2=0(center), 3=+1, 4=+2
+ * 좌우 완전 대칭.
+ * SPACING=295 기준 시각 갭:
+ *   far ↔ ±1  : 295 - (255/2 + 272/2) = ~31px
+ *   ±1  ↔ center: 295 - (272/2 + 290/2) = ~14px
  */
 const S = [
-  { w: 185, h: 335, op: 0.50, sh: 'none' },
-  { w: 265, h: 378, op: 1.00, sh: '0 4px 16px rgba(0,0,0,0.14)' },
-  { w: 295, h: 400, op: 1.00, sh: '0 8px 28px rgba(0,0,0,0.22)' },
-  { w: 265, h: 378, op: 0.85, sh: '0 4px 16px rgba(0,0,0,0.14)' },
-  { w: 185, h: 335, op: 0.50, sh: 'none' },
+  { w: 255, h: 370, op: 0.50, sh: 'none' },
+  { w: 272, h: 385, op: 1.00, sh: '0 4px 16px rgba(0,0,0,0.13)' },
+  { w: 290, h: 400, op: 1.00, sh: '0 8px 28px rgba(0,0,0,0.20)' },
+  { w: 272, h: 385, op: 0.85, sh: '0 4px 16px rgba(0,0,0,0.13)' },
+  { w: 255, h: 370, op: 0.50, sh: 'none' },
 ]
 
 function lerp(a, b, t) { return a + (b - a) * t }
@@ -45,11 +48,13 @@ export default function Carousel() {
   const wrapRef = useRef(null)
 
   useEffect(() => {
-    const wrap = wrapRef.current
+    const wrap     = wrapRef.current
     const getAnchor = () => window.innerWidth * 0.50
-    const NUM = Math.max(8, Math.ceil(window.innerWidth / SPACING) + 4)
+    const NUM      = Math.max(8, Math.ceil(window.innerWidth / SPACING) + 4)
 
-    const cards = []
+    /* 카드 DOM 생성 */
+    const cards  = []
+    const anchor0 = getAnchor()
     for (let i = 0; i < NUM; i++) {
       const el = document.createElement('div')
       el.className = 'c-card'
@@ -57,30 +62,40 @@ export default function Carousel() {
       el.style.backgroundImage = `url('${IMAGES[ii]}')`
       el.style.backgroundColor  = FALLBACKS[ii]
       wrap.appendChild(el)
-      cards.push({ el, cx: getAnchor() + (i - 2) * SPACING })
+      cards.push({ el, cx: anchor0 + (i - 2) * SPACING })
     }
+
+    /* 컨테이너 높이 캐시 — 매 프레임 reflow 방지 */
+    let ch = wrap.offsetHeight
+    const onResize = () => { ch = wrap.offsetHeight }
+    window.addEventListener('resize', onResize, { passive: true })
 
     let last = null
     let raf  = null
 
     function tick(ts) {
       if (!last) last = ts
-      const dt = Math.min((ts - last) / 1000, 0.05)
-      last = ts
-
+      const dt   = Math.min((ts - last) / 1000, 0.05)
+      last       = ts
+      const move = SPEED * dt
       const anch = getAnchor()
-      const ch   = wrap.offsetHeight
 
-      for (const c of cards) c.cx -= SPEED * dt
-
-      cards.sort((a, b) => a.cx - b.cx)
+      /* 1. 이동 + maxCx 단일 패스로 계산 (sort 불필요) */
+      let maxCx = -Infinity
       for (const c of cards) {
-        if (c.cx + 148 < 0) {
-          const maxCx = Math.max(...cards.map(x => x.cx))
-          c.cx = maxCx + SPACING
+        c.cx -= move
+        if (c.cx > maxCx) maxCx = c.cx
+      }
+
+      /* 2. 왼쪽으로 사라진 카드를 오른쪽 끝으로 이동 */
+      for (const c of cards) {
+        if (c.cx + HALF_MAX < 0) {
+          maxCx  += SPACING
+          c.cx    = maxCx
         }
       }
 
+      /* 3. 렌더 */
       for (const c of cards) {
         const dist = (c.cx - anch) / SPACING
         if (Math.abs(dist) > 3.2) { c.el.style.display = 'none'; continue }
@@ -107,6 +122,7 @@ export default function Carousel() {
 
     return () => {
       cancelAnimationFrame(raf)
+      window.removeEventListener('resize', onResize)
       cards.forEach(c => c.el.remove())
     }
   }, [])
