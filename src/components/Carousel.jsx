@@ -64,6 +64,8 @@ export default function Carousel() {
     let grabbedLogIdx  = -Infinity  // grab 시작 시점의 카드 논리 인덱스
     let grabCardX      = 0          // 잡힌 카드의 X 독립 이동량 (px)
     let grabCardAnim   = false      // 복귀 애니메이션 중
+    let grabEjecting   = false      // 배출 애니메이션 중
+    let grabEjectDir   = 0          // 배출 방향 (+1 오른쪽, -1 왼쪽)
 
     // 드래그 이동 거리 추적 — 짧으면 클릭으로 판정
     let dragStartX = 0
@@ -143,6 +145,7 @@ export default function Carousel() {
               grabbedLogIdx  = Math.round(offset)
               grabCardX      = 0
               grabCardAnim   = false
+              grabEjecting   = false
               target         = offset  // 캐러셀 위치 고정
             }
             wasCardGrab = true
@@ -155,14 +158,15 @@ export default function Carousel() {
         } else if (wasCardGrab) {
           wasCardGrab = false
           if (cardGrabActive) {
-            const EJECT_DIST = window.innerWidth * 0.30
+            cardGrabActive = false
+            const EJECT_DIST = window.innerWidth * 0.15  // 15% — 여백까지 쉽게 배출
             if (Math.abs(grabCardX) > EJECT_DIST) {
-              // 배출: 캐러셀 1칸 전진 후 카드 즉시 리셋
-              target = Math.round(offset) + (grabCardX > 0 ? 1 : -1)
-              grabCardX = 0; cardGrabActive = false; grabbedLogIdx = -Infinity
+              // 배출 애니메이션 시작: 카드가 화면 밖으로 날아감
+              grabEjectDir = grabCardX > 0 ? 1 : -1
+              grabEjecting = true
             } else {
               // 복귀 애니메이션
-              grabCardAnim = true; cardGrabActive = false
+              grabCardAnim = true
             }
           }
         }
@@ -192,7 +196,10 @@ export default function Carousel() {
         handVel = 0; wasHandPinching = false
         if (wasCardGrab) {
           wasCardGrab = false
-          if (cardGrabActive) { grabCardAnim = true; cardGrabActive = false }
+          if (cardGrabActive) {
+            grabCardAnim = true; cardGrabActive = false
+            grabEjecting = false
+          }
         }
       }
 
@@ -208,6 +215,17 @@ export default function Carousel() {
         handState.click = false
       }
 
+      // 배출 애니메이션: 카드가 화면 밖으로 날아간 뒤 캐러셀 전진
+      if (grabEjecting) {
+        grabCardX += grabEjectDir * window.innerWidth * 0.14
+        if (Math.abs(grabCardX) > window.innerWidth + 260) {
+          target        = Math.round(offset) + grabEjectDir
+          grabCardX     = 0
+          grabEjecting  = false
+          grabbedLogIdx = -Infinity
+        }
+      }
+
       // 복귀 애니메이션
       if (grabCardAnim) {
         grabCardX *= 0.78
@@ -216,7 +234,7 @@ export default function Carousel() {
         }
       }
 
-      if (!drag && !handState.activePinch && !handState.cardGrab && !cardGrabActive && !grabCardAnim) {
+      if (!drag && !handState.activePinch && !handState.cardGrab && !cardGrabActive && !grabCardAnim && !grabEjecting) {
         target += (Math.round(target) - target) * 0.12
       }
 
@@ -259,7 +277,7 @@ export default function Carousel() {
         }
 
         const isCtr     = Math.abs(visOff) < 0.5
-        const isGrabbed = (cardGrabActive || grabCardAnim) && logIdx === grabbedLogIdx
+        const isGrabbed = (cardGrabActive || grabCardAnim || grabEjecting) && logIdx === grabbedLogIdx
         const s = styleOf(visOff)
         el.style.display = 'block'
 
