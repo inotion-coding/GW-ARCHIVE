@@ -481,6 +481,20 @@ export default function HandTracker() {
         }
       }
 
+      // 이번 프레임에 감지되지 않은 손: missFrames 증가 → 게이지 초기화
+      for (const side of ['Left', 'Right']) {
+        const ls = lockState[side]
+        if (ls.lastSeenFrame !== frameCount && ls.holdFrames > 0) {
+          ls.missFrames++
+          if (ls.missFrames >= 3) {
+            const progressKey = side === 'Left' ? 'leftLockProgress' : 'rightLockProgress'
+            handState[progressKey] = 0
+            ls.holdFrames = 0
+            ls.missFrames = 0
+          }
+        }
+      }
+
       // 비활성 자동 잠금 (1분간 손 미감지)
       for (const side of ['Left', 'Right']) {
         const key = side === 'Left' ? 'leftLocked' : 'rightLocked'
