@@ -11,10 +11,6 @@ const handState = {
   back:        false,  // 더블탭 → 이전 페이지 트리거
   rotDx:       0,      // 손 회전: 오른손(+), 왼손(−) → 연속 스크롤 속도
   dragging:    false,  // 마우스/터치 드래그 중 (회전 제스처 차단용)
-  cardGrab:    false,  // 엄지+검지로 중앙 카드 잡기 활성
-  cardGrabX:   0,      // 핀치 미드포인트 X (미러, 0~1)
-  cardGrabY:   0,      // 핀치 미드포인트 Y (0~1, 미러 불필요)
-  cardGrabDx:  0,      // (레거시, 미사용) 프레임당 정규화 이동량
   leftLocked:  true,   // 왼손 제스처 잠금 상태
   rightLocked: true,   // 오른손 제스처 잠금 상태
   leftLockProgress:  0,    // 잠금 제스처 게이지 진행률 0~1
