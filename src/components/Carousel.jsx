@@ -23,7 +23,7 @@ const EASE    = 0.08    // lerp 계수 — 낮을수록 부드러움
 const FRIC    = 0.92    // 관성 감쇠율 (마우스 놓은 후 서서히 멈춤)
 const SENS    = 0.005   // 드래그 px → offset 변환 감도
 
-const SPACING = 278     // 카드 간 수평 간격 px
+const SPACING = 262     // 카드 간 수평 간격 px
 const MAX_ROT = 12      // 옆 카드 최대 rotateY 각도
 const DEPTH   = 45      // 옆 카드 translateZ 음수값 (카드당)
 
