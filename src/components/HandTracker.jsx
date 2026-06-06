@@ -470,6 +470,7 @@ export default function HandTracker() {
           wasPinching = !!activeLm
         }
       }
+      }
 
       // ── 손등 주먹 3초 유지 → 잠금 토글 ──
 
