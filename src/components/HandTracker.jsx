@@ -38,8 +38,16 @@ function isFingersFolded(lm) {
 }
 
 // 4손가락 모두 접힘 (잠금 제스처용 완전한 주먹)
+// 옆면 뷰: 끝마디가 PIP보다 아래 / 앞면(손바닥) 뷰: 끝마디가 손바닥 중심에 가까움
 function isFistClosed(lm) {
-  return lm[8].y > lm[6].y && isFingersFolded(lm)
+  if (lm[8].y > lm[6].y && isFingersFolded(lm)) return true
+  const hs = Math.hypot(lm[0].x - lm[9].x, lm[0].y - lm[9].y)
+  if (hs < 0.01) return false
+  const cx = (lm[0].x + lm[9].x) / 2
+  const cy = (lm[0].y + lm[9].y) / 2
+  return [8, 12, 16, 20].every(i =>
+    Math.hypot(lm[i].x - cx, lm[i].y - cy) / hs < 1.1
+  )
 }
 
 // 통합 핀치 분석: tipA·tipB 두 랜드마크 간 거리 비율 측정
@@ -60,7 +68,7 @@ function isPalmFacing(lm, side) {
   const v1x = lm[5].x - lm[0].x,  v1y = lm[5].y - lm[0].y
   const v2x = lm[17].x - lm[0].x, v2y = lm[17].y - lm[0].y
   const cross = v1x * v2y - v1y * v2x
-  return side === 'Right' ? cross > 0.01 : cross < -0.01
+  return side === 'Right' ? cross > 0 : cross < 0
 }
 
 // 검지만 펴고 나머지 접힘
@@ -166,8 +174,8 @@ export default function HandTracker() {
 
     // 손별 잠금 제스처 상태
     const lockState = {
-      Left:  { holdFrames: 0, flashFrames: 0, flashColor: null, lastSeenFrame: -INACTIVITY_FRAMES },
-      Right: { holdFrames: 0, flashFrames: 0, flashColor: null, lastSeenFrame: -INACTIVITY_FRAMES },
+      Left:  { holdFrames: 0, missFrames: 0, flashFrames: 0, flashColor: null, lastSeenFrame: -INACTIVITY_FRAMES },
+      Right: { holdFrames: 0, missFrames: 0, flashFrames: 0, flashColor: null, lastSeenFrame: -INACTIVITY_FRAMES },
     }
 
     async function init() {
@@ -429,6 +437,7 @@ export default function HandTracker() {
 
         if (isGesture && ls.flashFrames === 0) {
           ls.holdFrames++
+          ls.missFrames = 0
           if (ls.holdFrames >= FIST_HOLD_FRAMES) {
             const nowLocked = !handState[key]
             handState[key]  = nowLocked
@@ -437,7 +446,12 @@ export default function HandTracker() {
             ls.holdFrames   = 0
           }
         } else {
-          ls.holdFrames = 0
+          // 5프레임 연속 미감지 시에만 리셋 (노이즈 1~2프레임은 무시)
+          ls.missFrames++
+          if (ls.missFrames >= 5) {
+            ls.holdFrames = 0
+            ls.missFrames = 0
+          }
         }
       }
 

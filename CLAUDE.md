@@ -80,7 +80,7 @@ mv *_bak_* _bak/
 ### 커밋 시 _bak/ 오래된 파일 삭제
 - 커밋 직전, `_bak/` 내 파일을 **수정 시간 내림차순** 정렬
 - **가장 최근 2개는 보존**, 나머지는 `Remove-Item`(PowerShell) 또는 `rm`(Bash)으로 삭제
-- 삭제 후 `_bak/` 는 `.gitignore` 대상이므로 커밋에 포함하지 않음
+- `_bak/` 파일 삭제는 `.gitignore` 대상이므로 git에 반영되지 않음 → **별도 커밋 금지, 조용히 삭제만 수행**
 
 ```powershell
 # PowerShell 예시
