@@ -6,6 +6,8 @@ const handState = {
   zoomDelta:   0,      // 양손 엄지+검지 핀치: 프레임당 줌 변화량
   active:      false,  // 손 감지 여부
   click:       false,  // 검지 단독 탭 클릭 트리거
+  clickX:      0,      // 클릭 시 검지 X 좌표 (미러, 0~1)
+  clickY:      0,      // 클릭 시 검지 Y 좌표 (0~1)
   back:        false,  // 더블탭 → 이전 페이지 트리거
   rotDx:       0,      // 손 회전: 오른손(+), 왼손(−) → 연속 스크롤 속도
   dragging:    false,  // 마우스/터치 드래그 중 (회전 제스처 차단용)

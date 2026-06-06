@@ -24,6 +24,9 @@ const EASE   = 0.08
 const FRIC   = 0.92
 const SENS   = 0.005
 
+// 페이지 이동 후 복귀 시 마지막 위치 유지
+let savedCarouselOffset = 0
+
 const SP_BASE = 285
 const MAX_ROT = 7
 const DEPTH   = 45
@@ -63,7 +66,7 @@ export default function Carousel() {
       return el
     })
 
-    let offset = 0, target = 0, vel = 0
+    let offset = savedCarouselOffset, target = savedCarouselOffset, vel = 0
     let drag = false, lastX = 0
     let zoomLevel = 1
     let handVel = 0
@@ -163,9 +166,14 @@ export default function Carousel() {
       }
 
       if (handState.click) {
-        const base    = Math.round(offset)
-        const cardIdx = ((base % N) + N) % N
-        navigateRef.current(`/motion/${CARDS[cardIdx].id}`)
+        const fingerScreenX = handState.clickX * window.innerWidth
+        const fingerScreenY = handState.clickY * window.innerHeight
+        // 검지 끝 좌표에 실제 카드 요소가 있는지 hit-test
+        const hit = document.elementFromPoint(fingerScreenX, fingerScreenY)
+        const card = hit?.closest?.('.c-card')
+        if (card?.dataset?.cardId) {
+          navigateRef.current(`/motion/${card.dataset.cardId}`)
+        }
         handState.click = false
       }
 
@@ -232,6 +240,7 @@ export default function Carousel() {
 
     return () => {
       cancelAnimationFrame(raf)
+      savedCarouselOffset = offset  // 위치 저장
       wrap.removeEventListener('mousedown',  onDown)
       wrap.removeEventListener('touchstart', onDown)
       window.removeEventListener('mousemove', onMove)

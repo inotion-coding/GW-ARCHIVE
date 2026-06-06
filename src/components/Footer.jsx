@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import handState from '../utils/handState'
 
 export default function Footer() {
-  const [leftLocked,  setLeftLocked]  = useState(true)
-  const [rightLocked, setRightLocked] = useState(true)
+  const [leftLocked,  setLeftLocked]  = useState(() => handState.leftLocked)
+  const [rightLocked, setRightLocked] = useState(() => handState.rightLocked)
 
   useEffect(() => {
     let rafId

@@ -22,9 +22,9 @@ const DX_DEAD_ZONE  = 0.004
 const ZOOM_SENS     = 2.2
 const TAP_THRESHOLD = 0.04
 const DB_TAP_WINDOW   = 25    // 더블탭 인식 시간 창 (프레임, ~0.8초 at 30fps)
-const PINKY_RATIO   = 0.20  // 엄지+소지 핀치 임계값
-const PINKY_TIMEOUT = 60    // 연속 탭 간 최대 허용 프레임 (~2초)
-const PINKY_TAPS    = 3     // 잠금 토글에 필요한 탭 횟수
+const FIST_HOLD_FRAMES  = 15    // 주먹 유지 필요 프레임 (~0.5초 at 30fps)
+const INACTIVITY_FRAMES = 1800  // 자동 잠금 비활성 프레임 (~60초 at 30fps)
+const FLASH_FRAMES      = 45    // 색상 플래시 지속 프레임 (~1.5초)
 
 // 회전 감지 파라미터
 const ROT_EMA_K    = 0.50   // 각속도 EMA 계수 (0.5 = 빠른 반응)
@@ -84,11 +84,22 @@ function handRollAngle(lm) {
   return Math.atan2(dy, dx)   // -π ~ +π
 }
 
-function drawHand(lm, ctx, W, H, highlight, isDark) {
+function drawHand(lm, ctx, W, H, highlight, isDark, flashColor = null) {
   const pt = i => ({ x: (1 - lm[i].x) * W, y: lm[i].y * H })
-  ctx.strokeStyle = isDark
-    ? (highlight ? 'rgba(220,220,220,0.85)' : 'rgba(160,160,160,0.55)')
-    : (highlight ? 'rgba(55,55,55,0.8)'     : 'rgba(110,110,110,0.5)')
+  let stroke, dot
+  if (flashColor === 'green') {
+    stroke = 'rgba(80,220,120,0.92)'; dot = 'rgba(100,240,140,0.96)'
+  } else if (flashColor === 'red') {
+    stroke = 'rgba(220,70,70,0.92)';  dot = 'rgba(240,100,100,0.96)'
+  } else {
+    stroke = isDark
+      ? (highlight ? 'rgba(220,220,220,0.85)' : 'rgba(160,160,160,0.55)')
+      : (highlight ? 'rgba(55,55,55,0.8)'     : 'rgba(110,110,110,0.5)')
+    dot = isDark
+      ? (highlight ? 'rgba(230,230,230,0.95)' : 'rgba(150,150,150,0.75)')
+      : (highlight ? 'rgba(45,45,45,0.9)'     : 'rgba(100,100,100,0.7)')
+  }
+  ctx.strokeStyle = stroke
   ctx.lineWidth = highlight ? 1.6 : 1.2
   for (const [a, b] of CONNECTIONS) {
     const pa = pt(a), pb = pt(b)
@@ -96,12 +107,11 @@ function drawHand(lm, ctx, W, H, highlight, isDark) {
   }
   for (let i = 0; i < 21; i++) {
     const p = pt(i)
-    ctx.fillStyle = isDark
-      ? (highlight ? 'rgba(230,230,230,0.95)' : 'rgba(150,150,150,0.75)')
-      : (highlight ? 'rgba(45,45,45,0.9)'     : 'rgba(100,100,100,0.7)')
+    ctx.fillStyle = dot
     ctx.beginPath(); ctx.arc(p.x, p.y, i === 0 ? 4 : 2, 0, Math.PI * 2); ctx.fill()
   }
 }
+
 
 function drawPinchDot(lm, tipA, tipB, ctx, W, H, isDark) {
   const ptX = i => (1 - lm[i].x) * W
@@ -162,10 +172,10 @@ export default function HandTracker() {
       Right: { lastAngle: null, cumAngle: 0, cooldown: 0 },
     }
 
-    // 손별 소지 탭 카운트 상태
-    const seqState = {
-      Left:  { tapCount: 0, wasTouch: false, lastTapFrame: 0 },
-      Right: { tapCount: 0, wasTouch: false, lastTapFrame: 0 },
+    // 손별 잠금 제스처 상태
+    const lockState = {
+      Left:  { holdFrames: 0, flashFrames: 0, flashColor: null, lastSeenFrame: -INACTIVITY_FRAMES },
+      Right: { holdFrames: 0, flashFrames: 0, flashColor: null, lastSeenFrame: -INACTIVITY_FRAMES },
     }
 
     async function init() {
@@ -219,7 +229,7 @@ export default function HandTracker() {
         doubleTapCount = 0; wasBackPinching = false
         rollState.Left.lastAngle  = null; rollState.Left.velEma  = 0
         rollState.Right.lastAngle = null; rollState.Right.velEma = 0
-        for (const s of ['Left', 'Right']) { seqState[s].wasTouch = false }
+        for (const s of ['Left', 'Right']) { lockState[s].holdFrames = 0 }
         resetHandState()
         rafId = requestAnimationFrame(detect)
         return
@@ -234,15 +244,21 @@ export default function HandTracker() {
       }
       handState.active = gestureLms.length > 0
 
-      // 잠금된 손 스켈레톤은 흐릿하게 표시 (시각 피드백)
+      // 잠금된 손 스켈레톤 (플래시 중이면 색상, 아니면 흐릿하게)
       for (let i = 0; i < lms.length; i++) {
         const side   = handedness[i]?.[0]?.categoryName
         const locked = side === 'Left' ? handState.leftLocked : handState.rightLocked
-        if (locked) drawHand(lms[i], ctx, W, H, false, isDark)
+        const flash  = side && lockState[side].flashFrames > 0 ? lockState[side].flashColor : null
+        if (locked) drawHand(lms[i], ctx, W, H, false, isDark, flash)
       }
 
       const scrollInfos = gestureLms.map(analyzeScrollPinch)
       const zoomInfos   = gestureLms.map(analyzeZoomPinch)
+      // 제스처 손의 플래시 색상 조회
+      const gestureFlashOf = i => {
+        const side = gestureHandedness[i]?.[0]?.categoryName
+        return side && lockState[side].flashFrames > 0 ? lockState[side].flashColor : null
+      }
       const backInfos   = gestureLms.map(lm => {
         const isFist    = lm[12].y > lm[10].y && lm[16].y > lm[14].y && lm[20].y > lm[18].y
         const pinchDist = Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y)
@@ -322,7 +338,7 @@ export default function HandTracker() {
 
       // ── 양손 엄지+검지 핀치 → 줌 모드 ──
       if (bothZoomPinch) {
-        gestureLms.forEach(lm => drawHand(lm, ctx, W, H, true, isDark))
+        gestureLms.forEach((lm, i) => drawHand(lm, ctx, W, H, true, isDark, gestureFlashOf(i)))
         const p0 = drawPinchDot(gestureLms[0], 4, 8, ctx, W, H, isDark)
         const p1 = drawPinchDot(gestureLms[1], 4, 8, ctx, W, H, isDark)
 
@@ -352,14 +368,16 @@ export default function HandTracker() {
         const inIndexMode = firstLmFist && scrollActive < 0 && isIndexOnly(firstLmFist) && handState.rotDx === 0
 
         if (inIndexMode) {
-          gestureLms.forEach((lm, i) => drawHand(lm, ctx, W, H, i === 0, isDark))
+          gestureLms.forEach((lm, i) => drawHand(lm, ctx, W, H, i === 0, isDark, gestureFlashOf(i)))
           drawIndexTip(firstLmFist, ctx, W, H, tapFired, isDark)
 
           const curY = firstLmFist[8].y
           if (lastIndexY !== null) {
             const dy = curY - lastIndexY
             if (dy > TAP_THRESHOLD && !tapFired) {
-              handState.click = true
+              handState.click  = true
+              handState.clickX = 1 - firstLmFist[8].x
+              handState.clickY = firstLmFist[8].y
               tapFired = true
             } else if (dy < -0.01) {
               tapFired = false
@@ -376,7 +394,7 @@ export default function HandTracker() {
           // ── 엄지+중지 핀치 → 스크롤 모드 ──
           lastIndexY = null; tapFired = false
 
-          gestureLms.forEach((lm, i) => drawHand(lm, ctx, W, H, scrollInfos[i].activePinch || backInfos[i].activePinch, isDark))
+          gestureLms.forEach((lm, i) => drawHand(lm, ctx, W, H, scrollInfos[i].activePinch || backInfos[i].activePinch, isDark, gestureFlashOf(i)))
           scrollInfos.forEach((info, i) => {
             if (info.activePinch) drawPinchDot(gestureLms[i], 4, 12, ctx, W, H, isDark)
           })
@@ -403,37 +421,49 @@ export default function HandTracker() {
         }
       }
 
-      // ── 엄지+소지 3회 탭 → 잠금 토글 ──
+      // ── 손등 주먹 3초 유지 → 잠금 토글 ──
+
+      // 플래시 카운트다운
+      for (const side of ['Left', 'Right']) {
+        if (lockState[side].flashFrames > 0) lockState[side].flashFrames--
+      }
+
       for (let hi = 0; hi < lms.length; hi++) {
         const lm   = lms[hi]
         const side = handedness[hi]?.[0]?.categoryName
-        if (!side || !seqState[side]) continue
+        if (!side || !lockState[side]) continue
 
-        const ss       = seqState[side]
-        const handSize = Math.hypot(lm[0].x - lm[9].x, lm[0].y - lm[9].y)
-        const pinkyD   = Math.hypot(lm[4].x - lm[20].x, lm[4].y - lm[20].y)
-        const isPinky  = handSize > 0 && pinkyD / handSize < PINKY_RATIO
+        const ls  = lockState[side]
+        const key = side === 'Left' ? 'leftLocked' : 'rightLocked'
+        ls.lastSeenFrame = frameCount
 
-        // 접촉 시각화
-        if (isPinky) drawPinchDot(lm, 4, 20, ctx, W, H, isDark)
+        // 주먹(4손가락 모두 접힘) + 손등이 카메라를 향함
+        const isFist    = lm[8].y  > lm[6].y
+                       && lm[12].y > lm[10].y
+                       && lm[16].y > lm[14].y
+                       && lm[20].y > lm[18].y
+        const isGesture = isFist && !isBackFacing(lm, side)  // 손바닥이 카메라를 향함
 
-        // 타임아웃으로 카운트 리셋
-        if (ss.tapCount > 0 && frameCount - ss.lastTapFrame > PINKY_TIMEOUT) {
-          ss.tapCount = 0
-        }
-
-        // 하강 엣지(뗀 순간)에 탭 카운트
-        if (!isPinky && ss.wasTouch) {
-          ss.tapCount++
-          ss.lastTapFrame = frameCount
-          if (ss.tapCount >= PINKY_TAPS) {
-            const key = side === 'Left' ? 'leftLocked' : 'rightLocked'
-            handState[key] = !handState[key]
-            ss.tapCount = 0
+        if (isGesture && ls.flashFrames === 0) {
+          ls.holdFrames++
+          if (ls.holdFrames >= FIST_HOLD_FRAMES) {
+            const nowLocked = !handState[key]
+            handState[key]  = nowLocked
+            ls.flashColor   = nowLocked ? 'red' : 'green'
+            ls.flashFrames  = FLASH_FRAMES
+            ls.holdFrames   = 0
           }
+        } else {
+          ls.holdFrames = 0
         }
+      }
 
-        ss.wasTouch = isPinky
+      // 비활성 자동 잠금 (1분간 손 미감지)
+      for (const side of ['Left', 'Right']) {
+        const key = side === 'Left' ? 'leftLocked' : 'rightLocked'
+        if (!handState[key] && frameCount - lockState[side].lastSeenFrame > INACTIVITY_FRAMES) {
+          handState[key] = true
+        }
       }
 
       rafId = requestAnimationFrame(detect)

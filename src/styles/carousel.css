@@ -5,7 +5,6 @@
   right: 0;
   transform: translateY(-50%);
   height: 480px;
-  overflow: hidden;
   z-index: 2;
   cursor: grab;
   user-select: none;
