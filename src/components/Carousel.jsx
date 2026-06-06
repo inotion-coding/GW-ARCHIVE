@@ -32,11 +32,12 @@ function styleOf(off) {
   const abs  = Math.abs(off)
   const sign = off < 0 ? -1 : 1
   return {
-    x:    off * SPACING,
-    z:   -abs * DEPTH,
-    rotY: sign * Math.min(abs, 1) * MAX_ROT,
-    op:   Math.max(0.25, 1 - abs * 0.18),
-    zi:   Math.round(100 - abs * 20),
+    x:     off * SPACING,
+    z:    -abs * DEPTH,
+    rotY:  sign * Math.min(abs, 1) * MAX_ROT,
+    scale: Math.max(0.78, 1 - abs * 0.07),  // 중앙 1.0 → ±1 0.93 → ±2 0.86
+    op:    Math.max(0.25, 1 - abs * 0.18),
+    zi:    Math.round(100 - abs * 20),
   }
 }
 
@@ -118,7 +119,8 @@ export default function Carousel() {
         el.style.transform =
           `translateX(${s.x.toFixed(1)}px) ` +
           `translateZ(${s.z.toFixed(1)}px) ` +
-          `rotateY(${s.rotY.toFixed(2)}deg)`
+          `rotateY(${s.rotY.toFixed(2)}deg) ` +
+          `scale(${s.scale.toFixed(3)})`
         el.style.opacity = s.op.toFixed(3)
         el.style.zIndex  = s.zi
       }
