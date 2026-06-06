@@ -1,118 +1,120 @@
+/**
+ * Coverflow Carousel
+ * - GPU-only animation: transform + opacity (no layout/paint per frame)
+ * - Mouse/touch drag with lerp + inertia for buttery smooth motion
+ * - rotateY gives the "round" cylindrical feel
+ */
 import { useEffect, useRef } from 'react'
 import '../styles/carousel.css'
 
-const IMAGES = [
+const IMGS = [
   'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600',
   'https://images.unsplash.com/photo-1501854140801-50d01698950b?w=600',
   'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=600',
   'https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?w=600',
 ]
-const FALLBACKS = ['#d0d0d0', '#9aab98', '#c8bfb0', '#b8c0b8']
+const FALLS = ['#d0d0d0', '#9aab98', '#c8bfb0', '#b8c0b8']
 
-const SPEED      = 40   // px/sec
-const SPACING    = 295  // center-to-center px
-const HALF_MAX   = 150  // half of largest card + buffer (off-screen threshold)
-const BOTTOM_PAD = 30   // px from container bottom
+const N       = IMGS.length
+const SLOTS   = 11      // DOM 카드 수 (−5 … +5)
+const HALF    = 5
 
-/*
- * 좌우 완전 대칭.
- * SPACING=295 기준 시각 갭:
- *   far ↔ ±1  : 295 - (255/2 + 272/2) = ~31px
- *   ±1  ↔ center: 295 - (272/2 + 290/2) = ~14px
- */
-const S = [
-  { w: 255, h: 370, op: 0.50, sh: 'none' },
-  { w: 272, h: 385, op: 1.00, sh: '0 4px 16px rgba(0,0,0,0.13)' },
-  { w: 290, h: 400, op: 1.00, sh: '0 8px 28px rgba(0,0,0,0.20)' },
-  { w: 272, h: 385, op: 0.85, sh: '0 4px 16px rgba(0,0,0,0.13)' },
-  { w: 255, h: 370, op: 0.50, sh: 'none' },
-]
+const EASE    = 0.08    // lerp 계수 — 낮을수록 부드러움
+const FRIC    = 0.92    // 관성 감쇠율 (마우스 놓은 후 서서히 멈춤)
+const SENS    = 0.005   // 드래그 px → offset 변환 감도
 
-function lerp(a, b, t) { return a + (b - a) * t }
+const SPACING = 255     // 카드 간 수평 간격 px
+const MAX_ROT = 50      // 옆 카드 최대 rotateY 각도
+const DEPTH   = 110     // 옆 카드 translateZ 음수값 (카드당)
 
-function styleAt(dist) {
-  const idx = Math.max(0, Math.min(4, dist + 2))
-  const lo  = Math.min(3, Math.floor(idx))
-  const hi  = lo + 1
-  const t   = idx - lo
-  if (t === 0 || hi > 4) return S[lo]
+/* offset에 따른 3D 스타일 계산 */
+function styleOf(off) {
+  const abs  = Math.abs(off)
+  const sign = off < 0 ? -1 : 1
   return {
-    w:  lerp(S[lo].w,  S[hi].w,  t),
-    h:  lerp(S[lo].h,  S[hi].h,  t),
-    op: lerp(S[lo].op, S[hi].op, t),
-    sh: t < 0.5 ? S[lo].sh : S[hi].sh,
+    x:    off * SPACING,
+    z:   -abs * DEPTH,
+    rotY: sign * Math.min(abs, 1) * MAX_ROT,
+    op:   Math.max(0.25, 1 - abs * 0.18),
+    zi:   Math.round(100 - abs * 20),
   }
 }
 
 export default function Carousel() {
-  const wrapRef = useRef(null)
+  const wrapRef  = useRef(null)
+  const sceneRef = useRef(null)
 
   useEffect(() => {
-    const wrap     = wrapRef.current
-    const getAnchor = () => window.innerWidth * 0.50
-    const NUM      = Math.max(8, Math.ceil(window.innerWidth / SPACING) + 4)
+    const wrap  = wrapRef.current
+    const scene = sceneRef.current
 
-    /* 카드 DOM 생성 */
-    const cards  = []
-    const anchor0 = getAnchor()
-    for (let i = 0; i < NUM; i++) {
+    /* DOM 카드 생성 */
+    const slots = Array.from({ length: SLOTS }, () => {
       const el = document.createElement('div')
       el.className = 'c-card'
-      const ii = i % IMAGES.length
-      el.style.backgroundImage = `url('${IMAGES[ii]}')`
-      el.style.backgroundColor  = FALLBACKS[ii]
-      wrap.appendChild(el)
-      cards.push({ el, cx: anchor0 + (i - 2) * SPACING })
+      scene.appendChild(el)
+      return el
+    })
+
+    let offset = 0, target = 0, vel = 0
+    let drag = false, lastX = 0
+
+    const px = e => e.clientX ?? e.touches?.[0]?.clientX ?? 0
+
+    const onDown = e => { drag = true; vel = 0; lastX = px(e) }
+    const onMove = e => {
+      if (!drag) return
+      const x = px(e)
+      vel = -(x - lastX) * SENS
+      target += vel
+      lastX = x
     }
+    const onUp = () => { drag = false }
 
-    /* 컨테이너 높이 캐시 — 매 프레임 reflow 방지 */
-    let ch = wrap.offsetHeight
-    const onResize = () => { ch = wrap.offsetHeight }
-    window.addEventListener('resize', onResize, { passive: true })
+    wrap.addEventListener('mousedown',  onDown)
+    wrap.addEventListener('touchstart', onDown, { passive: true })
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('touchmove', onMove, { passive: true })
+    window.addEventListener('mouseup',   onUp)
+    window.addEventListener('touchend',  onUp)
 
-    let last = null
-    let raf  = null
+    let raf = null
 
-    function tick(ts) {
-      if (!last) last = ts
-      const dt   = Math.min((ts - last) / 1000, 0.05)
-      last       = ts
-      const move = SPEED * dt
-      const anch = getAnchor()
+    function tick() {
+      /* 관성 적용 */
+      if (!drag) { vel *= FRIC; target += vel }
 
-      /* 1. 이동 + maxCx 단일 패스로 계산 (sort 불필요) */
-      let maxCx = -Infinity
-      for (const c of cards) {
-        c.cx -= move
-        if (c.cx > maxCx) maxCx = c.cx
-      }
+      /* 부드러운 보간 */
+      offset += (target - offset) * EASE
 
-      /* 2. 왼쪽으로 사라진 카드를 오른쪽 끝으로 이동 */
-      for (const c of cards) {
-        if (c.cx + HALF_MAX < 0) {
-          maxCx  += SPACING
-          c.cx    = maxCx
+      const base = Math.round(offset)
+
+      for (let i = 0; i < SLOTS; i++) {
+        const el     = slots[i]
+        const slot   = i - HALF           // −5 … +5
+        const logIdx = base + slot        // 논리적 카드 인덱스
+        const visOff = logIdx - offset    // 중심으로부터 소수 거리
+
+        /* 화면 밖 카드 숨김 */
+        if (Math.abs(visOff) > 3.8) { el.style.display = 'none'; continue }
+
+        /* 이미지 캐시 교체 */
+        const imgIdx = ((logIdx % N) + N) % N
+        const imgUrl = `url('${IMGS[imgIdx]}')`
+        if (el._img !== imgUrl) {
+          el.style.backgroundImage = el._img = imgUrl
+          el.style.backgroundColor = FALLS[imgIdx]
         }
-      }
 
-      /* 3. 렌더 */
-      for (const c of cards) {
-        const dist = (c.cx - anch) / SPACING
-        if (Math.abs(dist) > 3.2) { c.el.style.display = 'none'; continue }
-
-        const s    = styleAt(dist)
-        const left = c.cx - s.w / 2
-        const top  = ch - s.h - BOTTOM_PAD
-        const zi   = Math.round(10 - Math.abs(dist) * 3)
-
-        c.el.style.display    = 'block'
-        c.el.style.left       = left.toFixed(1) + 'px'
-        c.el.style.top        = top.toFixed(1)  + 'px'
-        c.el.style.width      = s.w.toFixed(1)  + 'px'
-        c.el.style.height     = s.h.toFixed(1)  + 'px'
-        c.el.style.opacity    = s.op.toFixed(3)
-        c.el.style.boxShadow  = s.sh
-        c.el.style.zIndex     = zi
+        /* GPU 합성 레이어 속성만 변경 */
+        const s = styleOf(visOff)
+        el.style.display   = 'block'
+        el.style.transform =
+          `translateX(${s.x.toFixed(1)}px) ` +
+          `translateZ(${s.z.toFixed(1)}px) ` +
+          `rotateY(${s.rotY.toFixed(2)}deg)`
+        el.style.opacity = s.op.toFixed(3)
+        el.style.zIndex  = s.zi
       }
 
       raf = requestAnimationFrame(tick)
@@ -122,10 +124,19 @@ export default function Carousel() {
 
     return () => {
       cancelAnimationFrame(raf)
-      window.removeEventListener('resize', onResize)
-      cards.forEach(c => c.el.remove())
+      wrap.removeEventListener('mousedown',  onDown)
+      wrap.removeEventListener('touchstart', onDown)
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('touchmove', onMove)
+      window.removeEventListener('mouseup',   onUp)
+      window.removeEventListener('touchend',  onUp)
+      slots.forEach(el => el.remove())
     }
   }, [])
 
-  return <div ref={wrapRef} className="carousel-wrap" />
+  return (
+    <div ref={wrapRef} className="carousel-wrap">
+      <div ref={sceneRef} className="carousel-scene" />
+    </div>
+  )
 }
