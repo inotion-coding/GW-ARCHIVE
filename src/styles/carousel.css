@@ -46,6 +46,13 @@
   filter: grayscale(60%);
 }
 
+/* 카드 잡힌 상태 — 컬러 복원 + 그림자 상승 */
+.c-card--grabbed {
+  filter: grayscale(0%);
+  box-shadow: 0 20px 52px rgba(0,0,0,0.38);
+  transition: filter 0.12s ease, box-shadow 0.12s ease;
+}
+
 .c-card-label {
   position: absolute;
   bottom: 0;

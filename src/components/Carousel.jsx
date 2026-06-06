@@ -232,18 +232,20 @@ export default function Carousel() {
           el._label.textContent = card.title
         }
 
+        const isCtr     = Math.abs(visOff) < 0.5
+        const isGrabbed = cardGrabActive && isCtr
         const s = styleOf(visOff)
         el.style.display   = 'block'
         el.style.transform =
           `translateX(${s.x.toFixed(1)}px) ` +
-          `translateZ(${s.z.toFixed(1)}px) ` +
+          `translateZ(${(s.z + (isGrabbed ? 24 : 0)).toFixed(1)}px) ` +
           `rotateY(${s.rotY.toFixed(2)}deg) ` +
-          `scale(${s.scale.toFixed(3)})`
-        el.style.opacity = s.op.toFixed(3)
-        el.style.zIndex  = s.zi
+          `scale(${(s.scale * (isGrabbed ? 1.06 : 1)).toFixed(3)})`
+        el.style.opacity = isGrabbed ? '1' : s.op.toFixed(3)
+        el.style.zIndex  = isGrabbed ? 200 : s.zi
 
-        // 중앙 카드만 활성 표시
-        el.classList.toggle('c-card--active', Math.abs(visOff) < 0.5)
+        el.classList.toggle('c-card--active',  isCtr)
+        el.classList.toggle('c-card--grabbed', isGrabbed)
       }
 
       raf = requestAnimationFrame(tick)
