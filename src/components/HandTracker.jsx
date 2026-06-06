@@ -27,8 +27,6 @@ const INACTIVITY_FRAMES = 1800  // 자동 잠금 비활성 프레임 (~60초 at 
 const FLASH_FRAMES      = 45    // 색상 플래시 지속 프레임 (~1.5초)
 
 // 회전 감지 파라미터
-const ROT_EMA_K    = 0.50   // 각속도 EMA 계수 (0.5 = 빠른 반응)
-const ROT_THRESH   = 0.060  // rad/frame — 이 이상만 회전으로 판정 (느린 동작 차단)
 const ROT_IMPULSE  = 0.45   // 발동 시 임펄스 속도 (FRIC=0.92 기준 약 5.6 카드 이동)
 const ROT_COOLDOWN = 22     // 발동 후 재발동 방지 프레임 (~0.7초 at 30fps)
 
@@ -172,8 +170,8 @@ export default function HandTracker() {
 
     // 손별 roll 각도 추적 (Left / Right)
     const rollState = {
-      Left:  { lastAngle: null, cumAngle: 0, cooldown: 0 },
-      Right: { lastAngle: null, cumAngle: 0, cooldown: 0 },
+      Left:  { lastAngle: null, cumAngle: 0, cooldown: 0, startPalmFacing: null },
+      Right: { lastAngle: null, cumAngle: 0, cooldown: 0, startPalmFacing: null },
     }
 
     // 손별 잠금 제스처 상태
@@ -233,8 +231,8 @@ export default function HandTracker() {
         if (wasPinching) { handState.snap = true; wasPinching = false }
         lastX = null; lastZoomDist = null; lastIndexY = null; tapFired = false
         doubleTapCount = 0; wasBackPinching = false
-        rollState.Left.lastAngle  = null; rollState.Left.velEma  = 0
-        rollState.Right.lastAngle = null; rollState.Right.velEma = 0
+        rollState.Left.lastAngle  = null; rollState.Left.cumAngle  = 0; rollState.Left.startPalmFacing  = null
+        rollState.Right.lastAngle = null; rollState.Right.cumAngle = 0; rollState.Right.startPalmFacing = null
         for (const s of ['Left', 'Right']) {
           lockState[s].holdFrames = 0
           lockState[s].missFrames = 0
@@ -313,25 +311,40 @@ export default function HandTracker() {
             if (dAngle >  Math.PI) dAngle -= 2 * Math.PI
             if (dAngle < -Math.PI) dAngle += 2 * Math.PI
 
-            if (rs.cumAngle !== 0 && rs.cumAngle * dAngle < 0) rs.cumAngle = 0
+            // 방향 전환: 누적 리셋 + 현재 손 방향을 새 기준점으로
+            if (rs.cumAngle !== 0 && rs.cumAngle * dAngle < 0) {
+              rs.cumAngle = 0
+              rs.startPalmFacing = isPalmFacing(lm, side)
+            }
             rs.cumAngle += dAngle
 
             const FIRE_ANGLE = Math.PI * 75 / 180
             if (Math.abs(rs.cumAngle) > FIRE_ANGLE) {
-              const dir = side === 'Right' ? 1 : -1
-              handState.rotDx = dir * ROT_IMPULSE
-              rs.cooldown = ROT_COOLDOWN
+              // 손바닥→손등 방향에서 시작한 회전만 허용
+              if (rs.startPalmFacing) {
+                const dir = side === 'Right' ? 1 : -1
+                handState.rotDx = dir * ROT_IMPULSE
+                rs.cooldown = ROT_COOLDOWN
+                drawRotationArc(lm, ctx, W, H, side, isDark)
+              }
               rs.cumAngle = 0
-              drawRotationArc(lm, ctx, W, H, side, isDark)
+              rs.startPalmFacing = null
             }
           }
 
-          if (rs.cooldown === 0) rs.lastAngle = angle
+          if (rs.cooldown === 0) {
+            if (rs.lastAngle === null) {
+              rs.startPalmFacing = isPalmFacing(lm, side)  // 추적 시작 시 초기 방향 기록
+              rs.cumAngle = 0
+            }
+            rs.lastAngle = angle
+          }
         }
       } else {
         for (const side of ['Left', 'Right']) {
-          rollState[side].lastAngle = null
-          rollState[side].cumAngle  = 0
+          rollState[side].lastAngle      = null
+          rollState[side].cumAngle       = 0
+          rollState[side].startPalmFacing = null
         }
       }
 
