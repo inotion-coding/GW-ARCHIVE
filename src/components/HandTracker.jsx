@@ -53,11 +53,10 @@ function analyzePinch(lm, tipA, tipB, ratio) {
   }
 }
 
-// 손등이 카메라를 향하는지 판별
-// 손목(0)→검지MCP(5) 벡터와 손목(0)→소지MCP(17) 벡터의 2D 외적 z 성분
-// 오른손 palm facing 시 cross > 0 → back facing 시 cross < 0 (비미러 카메라 좌표계)
-// 왼손은 반대
-function isBackFacing(lm, side) {
+// 손바닥이 카메라를 향하는지 판별
+// 손목(0)→검지MCP(5) × 손목(0)→소지MCP(17) 2D 외적의 z 성분
+// 비미러 카메라 좌표계: 오른손 palm facing → cross > 0, 왼손 palm facing → cross < 0
+function isPalmFacing(lm, side) {
   const v1x = lm[5].x - lm[0].x,  v1y = lm[5].y - lm[0].y
   const v2x = lm[17].x - lm[0].x, v2y = lm[17].y - lm[0].y
   const cross = v1x * v2y - v1y * v2x
@@ -426,7 +425,7 @@ export default function HandTracker() {
         ls.lastSeenFrame = frameCount
 
         // 완전한 주먹 + 손바닥이 카메라를 향함
-        const isGesture = isFistClosed(lm) && !isBackFacing(lm, side)
+        const isGesture = isFistClosed(lm) && isPalmFacing(lm, side)
 
         if (isGesture && ls.flashFrames === 0) {
           ls.holdFrames++
