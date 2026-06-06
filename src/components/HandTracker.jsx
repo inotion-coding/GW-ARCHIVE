@@ -14,9 +14,8 @@ const CONNECTIONS = [
   [13,17],[0,17],[17,18],[18,19],[19,20],
 ]
 
-const DRAG_PINCH_RATIO = 0.30   // 엄지+검지 드래그 핀치 임계 비율
-const DRAG_PINCH_SENS  = 12     // 드래그 이동 민감도
-const DRAG_PINCH_DEAD  = 0.003  // 드래그 데드존 (미세 떨림 차단)
+const CARD_GRAB_RATIO = 0.28   // 엄지+검지 카드 잡기 임계 비율
+const CARD_GRAB_DEAD  = 0.003  // 카드 잡기 데드존 (미세 떨림 차단)
 const SCROLL_RATIO  = 0.33
 const ZOOM_RATIO    = 0.28
 const BACK_RATIO    = 0.17   // 뒤로가기 더블탭: 정밀 접촉만 허용
@@ -170,8 +169,8 @@ export default function HandTracker() {
     let doubleTapCount  = 0
     let doubleTapFrame  = 0
     let wasBackPinching = false
-    let dragLastMidX    = null   // 드래그 핀치 직전 미드포인트 X
-    let wasDragPinching = false  // 드래그 핀치 직전 활성 여부
+    let cardGrabLastX    = null   // 카드 잡기 직전 미드포인트 X
+    let wasCardGrabbing = false  // 카드 잡기 직전 활성 여부
 
     // 손별 roll 각도 추적 (Left / Right)
     const rollState = {
@@ -234,9 +233,9 @@ export default function HandTracker() {
 
       if (lms.length === 0) {
         if (wasPinching) { handState.snap = true; wasPinching = false }
-        if (wasDragPinching) {
-          wasDragPinching = false; dragLastMidX = null
-          handState.dragPinch = false; handState.dragPinchDx = 0
+        if (wasCardGrabbing) {
+          wasCardGrabbing = false; cardGrabLastX = null
+          handState.cardGrab = false; handState.cardGrabDx = 0
         }
         lastX = null; lastZoomDist = null; lastIndexY = null; tapFired = false
         doubleTapCount = 0; wasBackPinching = false
@@ -385,33 +384,34 @@ export default function HandTracker() {
 
         const scrollActive = scrollInfos.findIndex(p => p.activePinch)
 
-        // ── 엄지+검지 드래그 핀치 (단일 손, 중간 접촉) ──
-        // backInfos[0].activePinch=true(매우 정밀한 접촉) → 드래그 제외하여 백 제스처 충돌 방지
-        const fLm      = gestureLms.length === 1 ? gestureLms[0] : null
-        const dInfo    = fLm ? analyzePinch(fLm, 4, 8, DRAG_PINCH_RATIO) : null
-        const isDragPinch = dInfo?.activePinch && !backInfos[0]?.activePinch
+        // ── 엄지+검지 카드 잡기 (단일 손, 중간 접촉) ──
+        // backInfos[0].activePinch=true(매우 정밀한 접촉) → 카드 잡기 제외하여 백 제스처 충돌 방지
+        const fLm        = gestureLms.length === 1 ? gestureLms[0] : null
+        const grabInfo   = fLm ? analyzePinch(fLm, 4, 8, CARD_GRAB_RATIO) : null
+        const isCardGrab = grabInfo?.activePinch && !backInfos[0]?.activePinch
 
-        if (isDragPinch) {
-          if (!wasDragPinching) {
+        if (isCardGrab) {
+          if (!wasCardGrabbing) {
             lastX = null; wasPinching = false
             handState.activePinch = false; handState.dx = 0
           }
-          const mx = 1 - dInfo.midX
-          if (dragLastMidX !== null) {
-            const raw = mx - dragLastMidX
-            handState.dragPinchDx = Math.abs(raw) > DRAG_PINCH_DEAD ? raw * DRAG_PINCH_SENS : 0
+          const mx = 1 - grabInfo.midX
+          if (cardGrabLastX !== null) {
+            const raw = mx - cardGrabLastX
+            handState.cardGrabDx = Math.abs(raw) > CARD_GRAB_DEAD ? raw : 0
           }
-          dragLastMidX    = mx
-          wasDragPinching = true
-          handState.dragPinch = true
+          cardGrabLastX    = mx
+          wasCardGrabbing  = true
+          handState.cardGrab  = true
+          handState.cardGrabX = mx
           gestureLms.forEach(lm => drawHand(lm, ctx, W, H, true, isDark, null))
           drawPinchDot(fLm, 4, 8, ctx, W, H, isDark)
           lastIndexY = null; tapFired = false
 
         } else {
-          if (wasDragPinching) {
-            wasDragPinching = false; dragLastMidX = null
-            handState.dragPinch = false; handState.dragPinchDx = 0
+          if (wasCardGrabbing) {
+            wasCardGrabbing = false; cardGrabLastX = null
+            handState.cardGrab = false; handState.cardGrabDx = 0
           }
 
           // ── 검지 단독 → 탭 클릭 ──
@@ -532,7 +532,7 @@ export default function HandTracker() {
       cancelAnimationFrame(rafId)
       videoRef.current?.srcObject?.getTracks().forEach(t => t.stop())
       landmarker?.close()
-      Object.assign(handState, { dx: 0, snap: false, activePinch: false, active: false, zoomDelta: 0, click: false, back: false, rotDx: 0, dragPinch: false, dragPinchDx: 0 })
+      Object.assign(handState, { dx: 0, snap: false, activePinch: false, active: false, zoomDelta: 0, click: false, back: false, rotDx: 0, cardGrab: false, cardGrabDx: 0 })
     }
   }, [])
 
