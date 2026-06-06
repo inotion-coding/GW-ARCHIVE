@@ -6,16 +6,12 @@ export default function Footer() {
   const [rightLocked, setRightLocked] = useState(() => handState.rightLocked)
 
   useEffect(() => {
-    let rafId
-    let prevL = handState.leftLocked
-    let prevR = handState.rightLocked
-    function poll() {
-      if (handState.leftLocked  !== prevL) { prevL = handState.leftLocked;  setLeftLocked(prevL)  }
-      if (handState.rightLocked !== prevR) { prevR = handState.rightLocked; setRightLocked(prevR) }
-      rafId = requestAnimationFrame(poll)
-    }
-    rafId = requestAnimationFrame(poll)
-    return () => cancelAnimationFrame(rafId)
+    // 잠금 상태는 초당 5회 체크로 충분 (RAF 60fps 대비 CPU 부하 대폭 감소)
+    const timer = setInterval(() => {
+      setLeftLocked(handState.leftLocked)
+      setRightLocked(handState.rightLocked)
+    }, 200)
+    return () => clearInterval(timer)
   }, [])
 
   return (

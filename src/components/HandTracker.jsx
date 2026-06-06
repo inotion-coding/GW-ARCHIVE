@@ -32,29 +32,24 @@ const ROT_THRESH   = 0.060  // rad/frame — 이 이상만 회전으로 판정 (
 const ROT_IMPULSE  = 0.45   // 발동 시 임펄스 속도 (FRIC=0.92 기준 약 5.6 카드 이동)
 const ROT_COOLDOWN = 22     // 발동 후 재발동 방지 프레임 (~0.7초 at 30fps)
 
-// 스크롤 핀치: 엄지(4) + 중지(12)
-function analyzeScrollPinch(lm) {
-  const isFist    = lm[12].y > lm[10].y && lm[16].y > lm[14].y && lm[20].y > lm[18].y
-  const pinchDist = Math.hypot(lm[4].x - lm[12].x, lm[4].y - lm[12].y)
-  const handSize  = Math.hypot(lm[0].x - lm[9].x, lm[0].y - lm[9].y)
-  const isPinch   = handSize > 0 && (pinchDist / handSize) < SCROLL_RATIO
-  return {
-    activePinch: isPinch && !isFist,
-    midX: (lm[4].x + lm[12].x) / 2,
-    midY: (lm[4].y + lm[12].y) / 2,
-  }
+// 중지·약지·소지가 접혀 있는지 (검지 제외 주먹 판별)
+function isFingersFolded(lm) {
+  return lm[12].y > lm[10].y && lm[16].y > lm[14].y && lm[20].y > lm[18].y
 }
 
-// 줌 핀치: 엄지(4) + 검지(8)
-function analyzeZoomPinch(lm) {
-  const isFist    = lm[12].y > lm[10].y && lm[16].y > lm[14].y && lm[20].y > lm[18].y
-  const pinchDist = Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y)
+// 4손가락 모두 접힘 (잠금 제스처용 완전한 주먹)
+function isFistClosed(lm) {
+  return lm[8].y > lm[6].y && isFingersFolded(lm)
+}
+
+// 통합 핀치 분석: tipA·tipB 두 랜드마크 간 거리 비율 측정
+function analyzePinch(lm, tipA, tipB, ratio) {
+  const pinchDist = Math.hypot(lm[tipA].x - lm[tipB].x, lm[tipA].y - lm[tipB].y)
   const handSize  = Math.hypot(lm[0].x - lm[9].x, lm[0].y - lm[9].y)
-  const isPinch   = handSize > 0 && (pinchDist / handSize) < ZOOM_RATIO
   return {
-    activePinch: isPinch && !isFist,
-    midX: (lm[4].x + lm[8].x) / 2,
-    midY: (lm[4].y + lm[8].y) / 2,
+    activePinch: !isFingersFolded(lm) && handSize > 0 && (pinchDist / handSize) < ratio,
+    midX: (lm[tipA].x + lm[tipB].x) / 2,
+    midY: (lm[tipA].y + lm[tipB].y) / 2,
   }
 }
 
@@ -69,12 +64,9 @@ function isBackFacing(lm, side) {
   return side === 'Right' ? cross > 0.01 : cross < -0.01
 }
 
-// 검지 단독 펴기
+// 검지만 펴고 나머지 접힘
 function isIndexOnly(lm) {
-  return lm[8].y  < lm[6].y
-      && lm[12].y > lm[10].y
-      && lm[16].y > lm[14].y
-      && lm[20].y > lm[18].y
+  return lm[8].y < lm[6].y && isFingersFolded(lm)
 }
 
 // 손바닥 roll 각도: 검지MCP(5) → 소지MCP(17) 벡터의 기울기
@@ -156,6 +148,7 @@ export default function HandTracker() {
   useEffect(() => {
     let landmarker   = null
     let rafId        = null
+    let lastDetectMs = 0          // 30fps 스로틀용
     let lastX           = null
     let wasPinching     = false
     let lastZoomDist    = null
@@ -205,13 +198,15 @@ export default function HandTracker() {
       handState.rotDx       = 0
     }
 
-    function detect() {
+    function detect(ts) {
+      rafId = requestAnimationFrame(detect)
+      // 30fps 캡: MediaPipe 추론 빈도를 절반으로 줄여 노트북 부하 감소
+      if (ts - lastDetectMs < 33) return
+      lastDetectMs = ts
+
       const video  = videoRef.current
       const canvas = canvasRef.current
-      if (!video || !canvas || !landmarker || video.readyState < 2) {
-        rafId = requestAnimationFrame(detect)
-        return
-      }
+      if (!video || !canvas || !landmarker || video.readyState < 2) return
 
       const W = canvas.width  = window.innerWidth
       const H = canvas.height = window.innerHeight
@@ -231,7 +226,6 @@ export default function HandTracker() {
         rollState.Right.lastAngle = null; rollState.Right.velEma = 0
         for (const s of ['Left', 'Right']) { lockState[s].holdFrames = 0 }
         resetHandState()
-        rafId = requestAnimationFrame(detect)
         return
       }
 
@@ -252,19 +246,13 @@ export default function HandTracker() {
         if (locked) drawHand(lms[i], ctx, W, H, false, isDark, flash)
       }
 
-      const scrollInfos = gestureLms.map(analyzeScrollPinch)
-      const zoomInfos   = gestureLms.map(analyzeZoomPinch)
-      // 제스처 손의 플래시 색상 조회
+      const scrollInfos    = gestureLms.map(lm => analyzePinch(lm, 4, 12, SCROLL_RATIO))
+      const zoomInfos      = gestureLms.map(lm => analyzePinch(lm, 4,  8, ZOOM_RATIO))
+      const backInfos      = gestureLms.map(lm => analyzePinch(lm, 4,  8, BACK_RATIO))
       const gestureFlashOf = i => {
         const side = gestureHandedness[i]?.[0]?.categoryName
         return side && lockState[side].flashFrames > 0 ? lockState[side].flashColor : null
       }
-      const backInfos   = gestureLms.map(lm => {
-        const isFist    = lm[12].y > lm[10].y && lm[16].y > lm[14].y && lm[20].y > lm[18].y
-        const pinchDist = Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y)
-        const handSize  = Math.hypot(lm[0].x - lm[9].x, lm[0].y - lm[9].y)
-        return { activePinch: !isFist && handSize > 0 && (pinchDist / handSize) < BACK_RATIO }
-      })
 
       const firstLmFist = gestureLms[0]
 
@@ -437,12 +425,8 @@ export default function HandTracker() {
         const key = side === 'Left' ? 'leftLocked' : 'rightLocked'
         ls.lastSeenFrame = frameCount
 
-        // 주먹(4손가락 모두 접힘) + 손등이 카메라를 향함
-        const isFist    = lm[8].y  > lm[6].y
-                       && lm[12].y > lm[10].y
-                       && lm[16].y > lm[14].y
-                       && lm[20].y > lm[18].y
-        const isGesture = isFist && !isBackFacing(lm, side)  // 손바닥이 카메라를 향함
+        // 완전한 주먹 + 손바닥이 카메라를 향함
+        const isGesture = isFistClosed(lm) && !isBackFacing(lm, side)
 
         if (isGesture && ls.flashFrames === 0) {
           ls.holdFrames++
@@ -466,7 +450,6 @@ export default function HandTracker() {
         }
       }
 
-      rafId = requestAnimationFrame(detect)
     }
 
     init()
