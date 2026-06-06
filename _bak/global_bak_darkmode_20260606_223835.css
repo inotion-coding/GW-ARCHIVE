@@ -1,0 +1,105 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  background-color: #ececec;
+  background-image:
+    linear-gradient(rgba(170,170,170,0.22) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(170,170,170,0.22) 1px, transparent 1px);
+  background-size: 44px 44px;
+  background-position: center center;
+  font-family: 'Courier Prime', monospace;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ── HEADER ── */
+header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 32px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: #1a1a1a;
+}
+
+/* ── MAIN ── */
+.main-center {
+  flex: 1;
+  position: relative;
+}
+
+/* ── FOOTER ── */
+footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 0 0 44px;
+  text-align: center;
+}
+
+.footer-row {
+  display: inline-flex;
+  align-items: baseline;
+  border-bottom: 1px solid #666;
+  padding-bottom: 8px;
+}
+
+.f-label {
+  font-family: 'Courier Prime', monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: #333;
+  margin-right: 24px;
+}
+
+.f-input {
+  font-family: 'Courier Prime', monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: #333;
+  background: transparent;
+  border: none;
+  outline: none;
+  width: 220px;
+}
+
+.f-input::placeholder {
+  color: #aaa;
+}
+
+.f-btn {
+  font-family: 'Courier Prime', monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: #1a1a1a;
+  background: none;
+  border: none;
+  cursor: pointer;
+  margin-left: 20px;
+  padding: 0;
+}
+
+.f-btn:hover {
+  text-decoration: underline;
+}

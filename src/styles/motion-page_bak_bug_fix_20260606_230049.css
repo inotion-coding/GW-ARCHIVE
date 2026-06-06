@@ -1,0 +1,40 @@
+.motion-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: 16px;
+  color: #333;
+}
+
+.motion-back {
+  position: fixed;
+  top: 24px;
+  left: 24px;
+  background: none;
+  border: 1px solid rgba(0,0,0,0.2);
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  letter-spacing: 0.05em;
+}
+
+.motion-back:hover {
+  background: rgba(0,0,0,0.04);
+}
+
+.motion-title {
+  font-size: 28px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.motion-desc {
+  font-size: 13px;
+  color: #888;
+  letter-spacing: 0.06em;
+  margin: 0;
+}
