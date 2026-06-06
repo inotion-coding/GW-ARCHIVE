@@ -47,6 +47,29 @@ export default function Carousel() {
     const wrap  = wrapRef.current
     const scene = sceneRef.current
 
+    // 카드를 여백 위치에 고정하는 overlay 생성
+    function placeCard(card, screenX, screenY) {
+      if (placedCardEl) { placedCardEl.remove(); placedCardEl = null }
+      const el = document.createElement('div')
+      el.className = 'c-card c-card--placed'
+      // 카드 중심이 screenX/Y에 오도록 배치
+      el.style.left   = `${(screenX - 126).toFixed(0)}px`
+      el.style.top    = `${(screenY - 179).toFixed(0)}px`
+      el.style.backgroundImage = `url('${card.img}')`
+      el.style.backgroundColor = card.color
+      if (card.title) {
+        const label = document.createElement('div')
+        label.className = 'c-card-label'
+        label.textContent = card.title
+        el.appendChild(label)
+      }
+      document.body.appendChild(el)
+      placedCardEl = el
+      // 4초 후 페이드아웃
+      setTimeout(() => { if (el.parentNode) el.style.opacity = '0' }, 4000)
+      setTimeout(() => { if (el.parentNode) { el.remove(); placedCardEl = null } }, 4600)
+    }
+
     const slots = Array.from({ length: SLOTS }, () => {
       const el = document.createElement('div')
       el.className = 'c-card'
@@ -67,9 +90,7 @@ export default function Carousel() {
     let grabInitX      = 0          // grab 시작 시 핀치 X (px, 화면 절대값)
     let grabInitY      = 0          // grab 시작 시 핀치 Y (px, 화면 절대값)
     let grabCardAnim   = false      // 복귀 애니메이션 중
-    let grabEjecting   = false      // 배출 애니메이션 중
-    let grabEjectVX    = 0          // 배출 속도 X (px/frame)
-    let grabEjectVY    = 0          // 배출 속도 Y (px/frame)
+    let placedCardEl   = null       // 여백에 고정된 카드 overlay
 
     // 드래그 이동 거리 추적 — 짧으면 클릭으로 판정
     let dragStartX = 0
@@ -168,13 +189,17 @@ export default function Carousel() {
           if (cardGrabActive) {
             cardGrabActive = false
             const dist = Math.hypot(grabCardX, grabCardY)
-            const EJECT_DIST = window.innerWidth * 0.15
-            if (dist > EJECT_DIST) {
-              // 배출: 현재 방향으로 날아감
-              const speed = window.innerWidth * 0.13
-              grabEjectVX = (grabCardX / dist) * speed
-              grabEjectVY = (grabCardY / dist) * speed
-              grabEjecting = true
+            const PLACE_DIST = window.innerWidth * 0.12  // 12% 이상 이동 시 여백에 고정
+            if (dist > PLACE_DIST) {
+              // 카드를 여백에 고정: overlay 생성 후 캐러셀 전진
+              const screenX = window.innerWidth  / 2 + grabCardX
+              const screenY = window.innerHeight / 2 + grabCardY
+              const cardIdx = ((grabbedLogIdx % N) + N) % N
+              placeCard(CARDS[cardIdx], screenX, screenY)
+              const advDir = Math.abs(grabCardX) >= Math.abs(grabCardY) * 0.6
+                ? (grabCardX > 0 ? 1 : -1) : 1
+              target = Math.round(offset) + advDir
+              grabCardX = 0; grabCardY = 0; grabbedLogIdx = -Infinity
             } else {
               // 복귀 애니메이션
               grabCardAnim = true
@@ -207,10 +232,7 @@ export default function Carousel() {
         handVel = 0; wasHandPinching = false
         if (wasCardGrab) {
           wasCardGrab = false
-          if (cardGrabActive) {
-            grabCardAnim = true; cardGrabActive = false
-            grabEjecting = false; grabEjectVX = 0; grabEjectVY = 0
-          }
+          if (cardGrabActive) { grabCardAnim = true; cardGrabActive = false }
         }
       }
 
@@ -226,19 +248,6 @@ export default function Carousel() {
         handState.click = false
       }
 
-      // 배출 애니메이션: 카드가 해당 방향으로 날아가 화면 밖으로 사라짐
-      if (grabEjecting) {
-        grabCardX += grabEjectVX
-        grabCardY += grabEjectVY
-        if (Math.hypot(grabCardX, grabCardY) > window.innerWidth + 300) {
-          // 수평 이동 방향으로 캐러셀 1칸 전진
-          const advDir = Math.abs(grabEjectVX) > 40 ? (grabEjectVX > 0 ? 1 : -1) : 1
-          target        = Math.round(offset) + advDir
-          grabCardX     = 0; grabCardY = 0
-          grabEjecting  = false; grabbedLogIdx = -Infinity
-        }
-      }
-
       // 복귀 애니메이션
       if (grabCardAnim) {
         grabCardX *= 0.78; grabCardY *= 0.78
@@ -247,7 +256,7 @@ export default function Carousel() {
         }
       }
 
-      if (!drag && !handState.activePinch && !handState.cardGrab && !cardGrabActive && !grabCardAnim && !grabEjecting) {
+      if (!drag && !handState.activePinch && !handState.cardGrab && !cardGrabActive && !grabCardAnim) {
         target += (Math.round(target) - target) * 0.12
       }
 
@@ -290,7 +299,7 @@ export default function Carousel() {
         }
 
         const isCtr     = Math.abs(visOff) < 0.5
-        const isGrabbed = (cardGrabActive || grabCardAnim || grabEjecting) && logIdx === grabbedLogIdx
+        const isGrabbed = (cardGrabActive || grabCardAnim) && logIdx === grabbedLogIdx
         const s = styleOf(visOff)
         el.style.display = 'block'
 
@@ -324,7 +333,8 @@ export default function Carousel() {
 
     return () => {
       cancelAnimationFrame(raf)
-      savedCarouselOffset = offset  // 위치 저장
+      savedCarouselOffset = offset
+      if (placedCardEl) { placedCardEl.remove(); placedCardEl = null }
       wrap.removeEventListener('mousedown',  onDown)
       wrap.removeEventListener('touchstart', onDown)
       window.removeEventListener('mousemove', onMove)
