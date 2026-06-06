@@ -1,0 +1,63 @@
+.carousel-wrap {
+  position: fixed;
+  top: 50vh;
+  left: 0;
+  right: 0;
+  transform: translateY(-50%);
+  height: 480px;
+  overflow: hidden;
+  z-index: 2;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.carousel-wrap:active {
+  cursor: grabbing;
+}
+
+/* perspective 컨테이너 — 자식 카드들의 3D 공간 기준 */
+.carousel-scene {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 1000px;
+  perspective-origin: 50% 50%;
+}
+
+/* 카드 — GPU 합성 레이어 힌트, 레이아웃 유발 속성 일절 없음 */
+.c-card {
+  position: absolute;
+  width: 252px;
+  height: 358px;
+  background-size: cover;
+  background-position: center;
+  filter: grayscale(100%);
+  border-radius: 2px;
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.c-card--active {
+  filter: grayscale(60%);
+}
+
+.c-card-label {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 10px 14px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.45));
+  color: rgba(255,255,255,0.88);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 400;
+  pointer-events: none;
+}
