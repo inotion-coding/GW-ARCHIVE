@@ -23,7 +23,7 @@ const EASE    = 0.08    // lerp 계수 — 낮을수록 부드러움
 const FRIC    = 0.92    // 관성 감쇠율 (마우스 놓은 후 서서히 멈춤)
 const SENS    = 0.005   // 드래그 px → offset 변환 감도
 
-const SPACING = 255     // 카드 간 수평 간격 px
+const SPACING = 278     // 카드 간 수평 간격 px
 const MAX_ROT = 12      // 옆 카드 최대 rotateY 각도
 const DEPTH   = 45      // 옆 카드 translateZ 음수값 (카드당)
 
@@ -35,7 +35,7 @@ function styleOf(off) {
     x:     off * SPACING,
     z:    -abs * DEPTH,
     rotY:  sign * Math.min(abs, 1) * MAX_ROT,
-    scale: Math.max(0.78, 1 - abs * 0.07),  // 중앙 1.0 → ±1 0.93 → ±2 0.86
+    scale: Math.max(0.84, 1 - abs * 0.05),  // 중앙 1.0 → ±1 0.95 → ±2 0.90
     op:    Math.max(0.25, 1 - abs * 0.18),
     zi:    Math.round(100 - abs * 20),
   }

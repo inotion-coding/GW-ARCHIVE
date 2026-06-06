@@ -26,8 +26,8 @@
 /* 카드 — GPU 합성 레이어 힌트, 레이아웃 유발 속성 일절 없음 */
 .c-card {
   position: absolute;
-  width: 210px;
-  height: 300px;
+  width: 252px;
+  height: 358px;
   background-size: cover;
   background-position: center;
   filter: grayscale(100%);
