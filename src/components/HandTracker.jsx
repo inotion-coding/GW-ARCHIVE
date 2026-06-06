@@ -37,16 +37,16 @@ function isFingersFolded(lm) {
   return lm[12].y > lm[10].y && lm[16].y > lm[14].y && lm[20].y > lm[18].y
 }
 
-// 4손가락 모두 접힘 (잠금 제스처용 완전한 주먹)
-// 옆면 뷰: 끝마디가 PIP보다 아래 / 앞면(손바닥) 뷰: 끝마디가 손바닥 중심에 가까움
+// 완전한 주먹 (잠금 제스처): 중지·약지·소지 필수 접힘 + 검지 접힘 확인
 function isFistClosed(lm) {
-  if (lm[8].y > lm[6].y && isFingersFolded(lm)) return true
   const hs = Math.hypot(lm[0].x - lm[9].x, lm[0].y - lm[9].y)
   if (hs < 0.01) return false
-  const cx = (lm[0].x + lm[9].x) / 2
+  if (!isFingersFolded(lm)) return false           // 중지·약지·소지 모두 접혀야 함
+  if (lm[8].y > lm[6].y) return true              // 옆면: 검지 끝이 PIP보다 아래
+  const cx = (lm[0].x + lm[9].x) / 2             // 앞면: 끝마디-손바닥 중심 거리 비율
   const cy = (lm[0].y + lm[9].y) / 2
   return [8, 12, 16, 20].every(i =>
-    Math.hypot(lm[i].x - cx, lm[i].y - cy) / hs < 1.1
+    Math.hypot(lm[i].x - cx, lm[i].y - cy) / hs < 0.85
   )
 }
 
@@ -175,8 +175,8 @@ export default function HandTracker() {
 
     // 손별 잠금 제스처 상태
     const lockState = {
-      Left:  { holdFrames: 0, missFrames: 0, flashFrames: 0, flashColor: null, lastSeenFrame: -INACTIVITY_FRAMES },
-      Right: { holdFrames: 0, missFrames: 0, flashFrames: 0, flashColor: null, lastSeenFrame: -INACTIVITY_FRAMES },
+      Left:  { holdFrames: 0, missFrames: 0, cooldown: 0, lastSeenFrame: -INACTIVITY_FRAMES },
+      Right: { holdFrames: 0, missFrames: 0, cooldown: 0, lastSeenFrame: -INACTIVITY_FRAMES },
     }
 
     async function init() {
@@ -232,7 +232,12 @@ export default function HandTracker() {
         doubleTapCount = 0; wasBackPinching = false
         rollState.Left.lastAngle  = null; rollState.Left.velEma  = 0
         rollState.Right.lastAngle = null; rollState.Right.velEma = 0
-        for (const s of ['Left', 'Right']) { lockState[s].holdFrames = 0 }
+        for (const s of ['Left', 'Right']) {
+          lockState[s].holdFrames = 0
+          lockState[s].missFrames = 0
+        }
+        handState.leftLockProgress  = 0
+        handState.rightLockProgress = 0
         resetHandState()
         return
       }
@@ -246,21 +251,16 @@ export default function HandTracker() {
       }
       handState.active = gestureLms.length > 0
 
-      // 잠금된 손 스켈레톤 (플래시 중이면 색상, 아니면 흐릿하게)
+      // 잠금된 손 스켈레톤 (흐릿하게만, 색상 플래시 없음)
       for (let i = 0; i < lms.length; i++) {
         const side   = handedness[i]?.[0]?.categoryName
         const locked = side === 'Left' ? handState.leftLocked : handState.rightLocked
-        const flash  = side && lockState[side].flashFrames > 0 ? lockState[side].flashColor : null
-        if (locked) drawHand(lms[i], ctx, W, H, false, isDark, flash)
+        if (locked) drawHand(lms[i], ctx, W, H, false, isDark, null)
       }
 
-      const scrollInfos    = gestureLms.map(lm => analyzePinch(lm, 4, 12, SCROLL_RATIO))
-      const zoomInfos      = gestureLms.map(lm => analyzePinch(lm, 4,  8, ZOOM_RATIO))
-      const backInfos      = gestureLms.map(lm => analyzePinch(lm, 4,  8, BACK_RATIO))
-      const gestureFlashOf = i => {
-        const side = gestureHandedness[i]?.[0]?.categoryName
-        return side && lockState[side].flashFrames > 0 ? lockState[side].flashColor : null
-      }
+      const scrollInfos = gestureLms.map(lm => analyzePinch(lm, 4, 12, SCROLL_RATIO))
+      const zoomInfos   = gestureLms.map(lm => analyzePinch(lm, 4,  8, ZOOM_RATIO))
+      const backInfos   = gestureLms.map(lm => analyzePinch(lm, 4,  8, BACK_RATIO))
 
       const firstLmFist = gestureLms[0]
 
@@ -334,7 +334,7 @@ export default function HandTracker() {
 
       // ── 양손 엄지+검지 핀치 → 줌 모드 ──
       if (bothZoomPinch) {
-        gestureLms.forEach((lm, i) => drawHand(lm, ctx, W, H, true, isDark, gestureFlashOf(i)))
+        gestureLms.forEach((lm, i) => drawHand(lm, ctx, W, H, true, isDark, null))
         const p0 = drawPinchDot(gestureLms[0], 4, 8, ctx, W, H, isDark)
         const p1 = drawPinchDot(gestureLms[1], 4, 8, ctx, W, H, isDark)
 
@@ -364,7 +364,7 @@ export default function HandTracker() {
         const inIndexMode = firstLmFist && scrollActive < 0 && isIndexOnly(firstLmFist) && handState.rotDx === 0
 
         if (inIndexMode) {
-          gestureLms.forEach((lm, i) => drawHand(lm, ctx, W, H, i === 0, isDark, gestureFlashOf(i)))
+          gestureLms.forEach((lm, i) => drawHand(lm, ctx, W, H, i === 0, isDark, null))
           drawIndexTip(firstLmFist, ctx, W, H, tapFired, isDark)
 
           const curY = firstLmFist[8].y
@@ -390,7 +390,7 @@ export default function HandTracker() {
           // ── 엄지+중지 핀치 → 스크롤 모드 ──
           lastIndexY = null; tapFired = false
 
-          gestureLms.forEach((lm, i) => drawHand(lm, ctx, W, H, scrollInfos[i].activePinch || backInfos[i].activePinch, isDark, gestureFlashOf(i)))
+          gestureLms.forEach((lm, i) => drawHand(lm, ctx, W, H, scrollInfos[i].activePinch || backInfos[i].activePinch, isDark, null))
           scrollInfos.forEach((info, i) => {
             if (info.activePinch) drawPinchDot(gestureLms[i], 4, 12, ctx, W, H, isDark)
           })
@@ -419,9 +419,9 @@ export default function HandTracker() {
 
       // ── 손등 주먹 3초 유지 → 잠금 토글 ──
 
-      // 플래시 카운트다운
+      // 재발동 방지 쿨다운
       for (const side of ['Left', 'Right']) {
-        if (lockState[side].flashFrames > 0) lockState[side].flashFrames--
+        if (lockState[side].cooldown > 0) lockState[side].cooldown--
       }
 
       for (let hi = 0; hi < lms.length; hi++) {
@@ -435,21 +435,26 @@ export default function HandTracker() {
 
         // 완전한 주먹 + 손바닥이 카메라를 향함
         const isGesture = isFistClosed(lm) && isPalmFacing(lm, side)
+        const progressKey = side === 'Left' ? 'leftLockProgress'  : 'rightLockProgress'
+        const flashKey    = side === 'Left' ? 'leftLockFlash'     : 'rightLockFlash'
 
-        if (isGesture && ls.flashFrames === 0) {
+        if (isGesture && ls.cooldown === 0) {
           ls.holdFrames++
           ls.missFrames = 0
+          handState[progressKey] = Math.min(ls.holdFrames / FIST_HOLD_FRAMES, 1)
           if (ls.holdFrames >= FIST_HOLD_FRAMES) {
             const nowLocked = !handState[key]
-            handState[key]  = nowLocked
-            ls.flashColor   = nowLocked ? 'red' : 'green'
-            ls.flashFrames  = FLASH_FRAMES
-            ls.holdFrames   = 0
+            handState[key]         = nowLocked
+            handState[flashKey]    = nowLocked ? 'lock' : 'unlock'
+            handState[progressKey] = 0
+            ls.cooldown   = FLASH_FRAMES
+            ls.holdFrames = 0
           }
         } else {
           // 5프레임 연속 미감지 시에만 리셋 (노이즈 1~2프레임은 무시)
           ls.missFrames++
           if (ls.missFrames >= 5) {
+            handState[progressKey] = 0
             ls.holdFrames = 0
             ls.missFrames = 0
           }

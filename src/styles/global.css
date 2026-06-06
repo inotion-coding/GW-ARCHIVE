@@ -119,6 +119,56 @@ footer {
   color: var(--text);
 }
 
+/* ── 잠금 게이지 ── */
+.lock-gauge-wrap {
+  width: 100%;
+  height: 2px;
+  background: rgba(128, 128, 128, 0.14);
+  border-radius: 1px;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.2s;
+  margin-top: 2px;
+}
+.lock-gauge-wrap.gauge-active {
+  opacity: 1;
+}
+.lock-gauge-fill {
+  height: 100%;
+  background: var(--text-muted);
+  border-radius: 1px;
+  transition: width 0.08s linear;
+}
+
+/* 잠금 해제 플래시 (초록) */
+.lock-gauge-wrap.gauge-flash-unlock {
+  animation: gaugeGlowUnlock 1.6s ease-out forwards;
+}
+.lock-gauge-wrap.gauge-flash-unlock .lock-gauge-fill {
+  background: rgba(72, 210, 120, 0.95);
+}
+
+/* 잠금 플래시 (빨간) */
+.lock-gauge-wrap.gauge-flash-lock {
+  animation: gaugeGlowLock 1.6s ease-out forwards;
+}
+.lock-gauge-wrap.gauge-flash-lock .lock-gauge-fill {
+  background: rgba(210, 68, 68, 0.95);
+}
+
+@keyframes gaugeGlowUnlock {
+  0%   { opacity: 1; box-shadow: 0 0 0 2px rgba(72, 210, 120, 0.0), 0 0 12px rgba(72, 210, 120, 0.55); }
+  20%  { box-shadow: 0 0 0 2px rgba(72, 210, 120, 0.2), 0 0 16px rgba(72, 210, 120, 0.7); }
+  50%  { opacity: 1; }
+  100% { opacity: 0; box-shadow: none; }
+}
+@keyframes gaugeGlowLock {
+  0%   { opacity: 1; box-shadow: 0 0 0 2px rgba(210, 68, 68, 0.0), 0 0 12px rgba(210, 68, 68, 0.55); }
+  20%  { box-shadow: 0 0 0 2px rgba(210, 68, 68, 0.2), 0 0 16px rgba(210, 68, 68, 0.7); }
+  50%  { opacity: 1; }
+  100% { opacity: 0; box-shadow: none; }
+}
+
 /* ── 다크모드 토글 버튼 ── */
 .theme-toggle {
   font-family: 'Courier Prime', monospace;

@@ -13,6 +13,10 @@ const handState = {
   dragging:    false,  // 마우스/터치 드래그 중 (회전 제스처 차단용)
   leftLocked:  true,   // 왼손 제스처 잠금 상태
   rightLocked: true,   // 오른손 제스처 잠금 상태
+  leftLockProgress:  0,    // 잠금 제스처 게이지 진행률 0~1
+  rightLockProgress: 0,
+  leftLockFlash:  null,    // 토글 시 'lock' | 'unlock' (읽은 후 null로 초기화)
+  rightLockFlash: null,
 }
 
 export default handState
