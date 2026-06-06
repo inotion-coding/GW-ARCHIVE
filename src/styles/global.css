@@ -8,11 +8,28 @@ html, body {
   height: 100%;
 }
 
+/* ── 테마 변수 ── */
+:root {
+  --bg:         #ececec;
+  --grid-line:  rgba(170,170,170,0.22);
+  --text:       #1a1a1a;
+  --text-muted: #666;
+  --border:     #666;
+}
+
+html.dark {
+  --bg:         #111111;
+  --grid-line:  rgba(80,80,80,0.28);
+  --text:       #e0e0e0;
+  --text-muted: #888;
+  --border:     #555;
+}
+
 body {
-  background-color: #ececec;
+  background-color: var(--bg);
   background-image:
-    linear-gradient(rgba(170,170,170,0.22) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(170,170,170,0.22) 1px, transparent 1px);
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size: 44px 44px;
   background-position: center center;
   font-family: 'Courier Prime', monospace;
@@ -21,6 +38,8 @@ body {
   flex-direction: column;
   position: relative;
   overflow: hidden;
+  transition: background-color 0.3s;
+  color: var(--text);
 }
 
 /* ── HEADER ── */
@@ -37,7 +56,7 @@ header {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.2em;
-  color: #1a1a1a;
+  color: var(--text);
 }
 
 /* ── MAIN ── */
@@ -56,50 +75,65 @@ footer {
   text-align: center;
 }
 
-.footer-row {
+.lock-status {
   display: inline-flex;
-  align-items: baseline;
-  border-bottom: 1px solid #666;
-  padding-bottom: 8px;
+  align-items: center;
+  gap: 40px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
 }
 
-.f-label {
+.lock-sep {
+  width: 1px;
+  height: 28px;
+  background: var(--border);
+  opacity: 0.5;
+}
+
+.lock-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 72px;
+}
+
+.lock-hand {
+  font-family: 'Courier Prime', monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.28em;
+  color: var(--text-muted);
+}
+
+.lock-state {
+  font-family: 'Courier Prime', monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--text-muted);
+  transition: color 0.4s;
+}
+
+.lock-state.lock-active {
+  color: var(--text);
+}
+
+/* ── 다크모드 토글 버튼 ── */
+.theme-toggle {
   font-family: 'Courier Prime', monospace;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.2em;
-  color: #333;
-  margin-right: 24px;
-}
-
-.f-input {
-  font-family: 'Courier Prime', monospace;
-  font-size: 11px;
-  letter-spacing: 0.08em;
-  color: #333;
-  background: transparent;
-  border: none;
-  outline: none;
-  width: 220px;
-}
-
-.f-input::placeholder {
-  color: #aaa;
-}
-
-.f-btn {
-  font-family: 'Courier Prime', monospace;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
-  color: #1a1a1a;
+  color: var(--text);
   background: none;
   border: none;
   cursor: pointer;
-  margin-left: 20px;
   padding: 0;
+  opacity: 0.6;
+  transition: opacity 0.2s;
 }
 
-.f-btn:hover {
-  text-decoration: underline;
+.theme-toggle:hover {
+  opacity: 1;
 }
