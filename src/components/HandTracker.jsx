@@ -62,13 +62,14 @@ function analyzePinch(lm, tipA, tipB, ratio) {
 }
 
 // 손바닥이 카메라를 향하는지 판별
-// 손목(0)→검지MCP(5) × 손목(0)→소지MCP(17) 2D 외적의 z 성분
-// 비미러 카메라 좌표계: 오른손 palm facing → cross > 0, 왼손 palm facing → cross < 0
+// MediaPipe는 user-facing 카메라에서 좌우 레이블을 미러 기준으로 매김:
+//   MediaPipe 'Right' = 카메라 이미지 오른쪽 = 사용자 실제 왼손
+// 따라서 실제 사용자 오른손(MediaPipe 'Left')에서 손바닥 방향: cross > 0
 function isPalmFacing(lm, side) {
   const v1x = lm[5].x - lm[0].x,  v1y = lm[5].y - lm[0].y
   const v2x = lm[17].x - lm[0].x, v2y = lm[17].y - lm[0].y
   const cross = v1x * v2y - v1y * v2x
-  return side === 'Right' ? cross > 0 : cross < 0
+  return side === 'Left' ? cross > 0 : cross < 0
 }
 
 // 검지만 펴고 나머지 접힘
