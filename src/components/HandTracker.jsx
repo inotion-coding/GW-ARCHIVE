@@ -37,16 +37,19 @@ function isFingersFolded(lm) {
   return lm[12].y > lm[10].y && lm[16].y > lm[14].y && lm[20].y > lm[18].y
 }
 
-// 완전한 주먹 (잠금 제스처): 중지·약지·소지 필수 접힘 + 검지 접힘 확인
+// 완전한 주먹 (잠금 제스처)
+// 옆면: 4손가락 끝이 MCP(뿌리 관절)보다 아래 — PIP보다 훨씬 엄격
+// 앞면: isFingersFolded + 끝마디-손바닥 중심 거리 비율 < 0.7
 function isFistClosed(lm) {
   const hs = Math.hypot(lm[0].x - lm[9].x, lm[0].y - lm[9].y)
   if (hs < 0.01) return false
-  if (!isFingersFolded(lm)) return false           // 중지·약지·소지 모두 접혀야 함
-  if (lm[8].y > lm[6].y) return true              // 옆면: 검지 끝이 PIP보다 아래
-  const cx = (lm[0].x + lm[9].x) / 2             // 앞면: 끝마디-손바닥 중심 거리 비율
+  if (lm[8].y > lm[5].y && lm[12].y > lm[9].y &&
+      lm[16].y > lm[13].y && lm[20].y > lm[17].y) return true
+  if (!isFingersFolded(lm)) return false
+  const cx = (lm[0].x + lm[9].x) / 2
   const cy = (lm[0].y + lm[9].y) / 2
   return [8, 12, 16, 20].every(i =>
-    Math.hypot(lm[i].x - cx, lm[i].y - cy) / hs < 0.85
+    Math.hypot(lm[i].x - cx, lm[i].y - cy) / hs < 0.7
   )
 }
 
@@ -453,7 +456,7 @@ export default function HandTracker() {
         } else {
           // 5프레임 연속 미감지 시에만 리셋 (노이즈 1~2프레임은 무시)
           ls.missFrames++
-          if (ls.missFrames >= 5) {
+          if (ls.missFrames >= 3) {
             handState[progressKey] = 0
             ls.holdFrames = 0
             ls.missFrames = 0
