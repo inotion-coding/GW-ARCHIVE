@@ -6,6 +6,7 @@
  */
 import { useEffect, useRef } from 'react'
 import '../styles/carousel.css'
+import handState from '../utils/handState'
 
 const IMGS = [
   'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600',
@@ -23,19 +24,27 @@ const EASE    = 0.08    // lerp 계수 — 낮을수록 부드러움
 const FRIC    = 0.92    // 관성 감쇠율 (마우스 놓은 후 서서히 멈춤)
 const SENS    = 0.005   // 드래그 px → offset 변환 감도
 
-const SPACING = 262     // 카드 간 수평 간격 px
-const MAX_ROT = 12      // 옆 카드 최대 rotateY 각도
-const DEPTH   = 45      // 옆 카드 translateZ 음수값 (카드당)
+const SP_BASE  = 285    // 기준 간격 — 이차 함수로 scale 보정된 시각 압축
+const MAX_ROT  = 7      // 옆 카드 최대 rotateY 각도
+const DEPTH    = 45     // 옆 카드 translateZ 음수값 (카드당)
 
 /* offset에 따른 3D 스타일 계산 */
 function styleOf(off) {
   const abs  = Math.abs(off)
   const sign = off < 0 ? -1 : 1
+
+  // 이차 함수: 카드 scale 감소를 보정해 시각 간격이 실제로 좁아지게
+  // 시각 간격 — ±1: ~21px, ±2: ~14px, ±3: ~7px
+  const x = sign * abs * (SP_BASE - 10 * abs)
+
+  // tanh 곡선: 선형 클램프 대신 부드럽게 휘는 회전값
+  const rotY = sign * MAX_ROT * Math.tanh(abs * 1.6)
+
   return {
-    x:     off * SPACING,
+    x,
     z:    -abs * DEPTH,
-    rotY:  sign * Math.min(abs, 1) * MAX_ROT,
-    scale: Math.max(0.84, 1 - abs * 0.05),  // 중앙 1.0 → ±1 0.95 → ±2 0.90
+    rotY,
+    scale: Math.max(0.84, 1 - abs * 0.05),
     op:    Math.max(0.25, 1 - abs * 0.18),
     zi:    Math.round(100 - abs * 20),
   }
@@ -59,6 +68,9 @@ export default function Carousel() {
 
     let offset = 0, target = 0, vel = 0
     let drag = false, lastX = 0
+    let zoomLevel = 1
+    let handVel = 0
+    let wasHandPinching = false
 
     const px = e => e.clientX ?? e.touches?.[0]?.clientX ?? 0
 
@@ -90,6 +102,50 @@ export default function Carousel() {
     function tick() {
       /* 드래그 중일 때만 관성 누적 (놓는 순간 snap target 고정) */
       if (!drag) { vel = 0 }
+
+      /* 핸드 트래킹 입력 (핀치+이동 → 스크롤, 핀치 해제 → 관성 스냅) */
+      if (handState.active) {
+        // 핀치 새로 시작: 진행 중인 관성·스냅 즉시 정지
+        if (handState.activePinch && !wasHandPinching) {
+          target  = offset
+          handVel = 0
+        }
+        wasHandPinching = handState.activePinch
+
+        if (handState.dx !== 0) {
+          // 속도를 지수 이동 평균으로 누적 (해제 시 관성 계산용)
+          handVel       = handVel * 0.5 + handState.dx * 0.5
+          target       += handState.dx
+          handState.dx  = 0
+        } else if (!handState.activePinch) {
+          handVel *= 0.8  // 핀치 없을 때 속도 감쇠
+        }
+        if (handState.snap) {
+          // 마우스 onUp과 동일: 속도 기반 관성 투영 후 스냅
+          const projected = offset + handVel / (1 - FRIC)
+          target         = Math.round(projected)
+          handVel        = 0
+          handState.snap = false
+        }
+      } else {
+        handVel         = 0
+        wasHandPinching = false
+      }
+
+      /* 스냅 중력: 입력 없을 때 target을 가장 가까운 카드로 부드럽게 당김 */
+      if (!drag && !handState.activePinch) {
+        target += (Math.round(target) - target) * 0.12
+      }
+
+      /* 양손 핀치 줌
+         상한: ±2 카드 중심(530px)이 뷰포트 절반에 닿는 지점 → 양옆 2장까지만 보임
+         하한: 0.5 (현재 유지) */
+      if (handState.zoomDelta !== 0) {
+        const maxZoom = (window.innerWidth / 2) / 530
+        zoomLevel = Math.max(0.5, Math.min(maxZoom, zoomLevel + handState.zoomDelta))
+        handState.zoomDelta = 0
+      }
+      scene.style.transform = `scale(${zoomLevel.toFixed(3)})`
 
       /* 부드러운 보간 */
       offset += (target - offset) * EASE

@@ -14,15 +14,22 @@ body {
     linear-gradient(rgba(170,170,170,0.22) 1px, transparent 1px),
     linear-gradient(90deg, rgba(170,170,170,0.22) 1px, transparent 1px);
   background-size: 44px 44px;
+  background-position: center center;
   font-family: 'Courier Prime', monospace;
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
-  overflow-x: hidden;
+  position: relative;
+  overflow: hidden;
 }
 
 /* ── HEADER ── */
 header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -34,13 +41,18 @@ header {
 }
 
 /* ── MAIN ── */
-.main-content {
+.main-center {
   flex: 1;
+  position: relative;
 }
 
 /* ── FOOTER ── */
 footer {
-  padding: 52px 0 44px;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 0 0 44px;
   text-align: center;
 }
 

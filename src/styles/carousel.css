@@ -1,8 +1,12 @@
 .carousel-wrap {
-  flex: 1;
-  position: relative;
+  position: fixed;
+  top: 50vh;
+  left: 0;
+  right: 0;
+  transform: translateY(-50%);
+  height: 480px;
   overflow: hidden;
-  min-height: 460px;
+  z-index: 2;
   cursor: grab;
   user-select: none;
   -webkit-user-select: none;
