@@ -61,6 +61,7 @@ export default function Carousel() {
     let wasHandPinching = false
     let wasCardGrab = false
     let cardGrabActive = false
+    let grabbedLogIdx = -Infinity  // grab 시작 시점의 카드 논리 인덱스
 
     // 드래그 이동 거리 추적 — 짧으면 클릭으로 판정
     let dragStartX = 0
@@ -133,9 +134,15 @@ export default function Carousel() {
         // ── 엄지+검지로 중앙 카드 잡아서 이동 ──
         if (handState.cardGrab) {
           if (!wasCardGrab) {
-            // grab 시작: 핀치 위치가 중앙 카드 위인지 확인
-            const CARD_HALF_NORM = 126 / window.innerWidth
-            cardGrabActive = Math.abs(handState.cardGrabX - 0.5) < CARD_HALF_NORM
+            // grab 시작: 핀치 위치가 중앙 카드 위인지 확인 (히트박스 ±160px)
+            const CARD_HALF_NORM = 160 / window.innerWidth
+            if (Math.abs(handState.cardGrabX - 0.5) < CARD_HALF_NORM) {
+              cardGrabActive = true
+              grabbedLogIdx  = Math.round(offset)  // 현재 중앙 카드 논리 인덱스
+            } else {
+              cardGrabActive = false
+              grabbedLogIdx  = -Infinity
+            }
             wasCardGrab = true
           }
           if (cardGrabActive && handState.cardGrabDx !== 0) {
@@ -146,7 +153,7 @@ export default function Carousel() {
           }
         } else if (wasCardGrab) {
           if (cardGrabActive) target = offset  // 놓는 순간 현재 위치 고정 (스냅 없음)
-          wasCardGrab = false; cardGrabActive = false
+          wasCardGrab = false; cardGrabActive = false; grabbedLogIdx = -Infinity
         }
 
         if (handState.activePinch && !wasHandPinching) {
@@ -174,7 +181,7 @@ export default function Carousel() {
         handVel = 0; wasHandPinching = false
         if (wasCardGrab) {
           if (cardGrabActive) target = offset
-          wasCardGrab = false; cardGrabActive = false
+          wasCardGrab = false; cardGrabActive = false; grabbedLogIdx = -Infinity
         }
       }
 
@@ -233,7 +240,7 @@ export default function Carousel() {
         }
 
         const isCtr     = Math.abs(visOff) < 0.5
-        const isGrabbed = cardGrabActive && isCtr
+        const isGrabbed = cardGrabActive && logIdx === grabbedLogIdx
         const s = styleOf(visOff)
         el.style.display   = 'block'
         el.style.transform =

@@ -14,8 +14,9 @@ const CONNECTIONS = [
   [13,17],[0,17],[17,18],[18,19],[19,20],
 ]
 
-const CARD_GRAB_RATIO = 0.28   // 엄지+검지 카드 잡기 임계 비율
-const CARD_GRAB_DEAD  = 0.003  // 카드 잡기 데드존 (미세 떨림 차단)
+const CARD_GRAB_RATIO  = 0.28   // 엄지+검지 카드 잡기 임계 비율
+const CARD_GRAB_DEAD   = 0.003  // 카드 잡기 데드존 (미세 떨림 차단)
+const CARD_GRAB_GRACE  = 6      // 감지 누락 허용 프레임 (깜빡임 방지)
 const SCROLL_RATIO  = 0.33
 const ZOOM_RATIO    = 0.28
 const BACK_RATIO    = 0.17   // 뒤로가기 더블탭: 정밀 접촉만 허용
@@ -170,7 +171,8 @@ export default function HandTracker() {
     let doubleTapFrame  = 0
     let wasBackPinching = false
     let cardGrabLastX    = null   // 카드 잡기 직전 미드포인트 X
-    let wasCardGrabbing = false  // 카드 잡기 직전 활성 여부
+    let wasCardGrabbing  = false  // 카드 잡기 직전 활성 여부
+    let cardGrabMissFrames = 0    // 감지 누락 프레임 수 (grace period)
 
     // 손별 roll 각도 추적 (Left / Right)
     const rollState = {
@@ -390,27 +392,37 @@ export default function HandTracker() {
         const grabInfo   = fLm ? analyzePinch(fLm, 4, 8, CARD_GRAB_RATIO) : null
         const isCardGrab = grabInfo?.activePinch && !backInfos[0]?.activePinch
 
-        if (isCardGrab) {
+        if (isCardGrab) cardGrabMissFrames = 0
+        else            cardGrabMissFrames++
+
+        // grace period: 감지 끊김이 CARD_GRAB_GRACE 프레임 미만이면 grab 유지 (깜빡임 방지)
+        const isGrabActive = isCardGrab || (wasCardGrabbing && cardGrabMissFrames <= CARD_GRAB_GRACE)
+
+        if (isGrabActive) {
           if (!wasCardGrabbing) {
             lastX = null; wasPinching = false
             handState.activePinch = false; handState.dx = 0
           }
-          const mx = 1 - grabInfo.midX
-          if (cardGrabLastX !== null) {
-            const raw = mx - cardGrabLastX
-            handState.cardGrabDx = Math.abs(raw) > CARD_GRAB_DEAD ? raw : 0
+          if (isCardGrab && fLm) {
+            const mx = 1 - grabInfo.midX
+            if (cardGrabLastX !== null) {
+              const raw = mx - cardGrabLastX
+              handState.cardGrabDx = Math.abs(raw) > CARD_GRAB_DEAD ? raw : 0
+            }
+            cardGrabLastX       = mx
+            handState.cardGrabX = mx
+          } else {
+            handState.cardGrabDx = 0  // grace period 중 이동 없음
           }
-          cardGrabLastX    = mx
-          wasCardGrabbing  = true
+          wasCardGrabbing     = true
           handState.cardGrab  = true
-          handState.cardGrabX = mx
           gestureLms.forEach(lm => drawHand(lm, ctx, W, H, true, isDark, null))
-          drawPinchDot(fLm, 4, 8, ctx, W, H, isDark)
+          if (fLm) drawPinchDot(fLm, 4, 8, ctx, W, H, isDark)
           lastIndexY = null; tapFired = false
 
         } else {
           if (wasCardGrabbing) {
-            wasCardGrabbing = false; cardGrabLastX = null
+            wasCardGrabbing = false; cardGrabLastX = null; cardGrabMissFrames = 0
             handState.cardGrab = false; handState.cardGrabDx = 0
           }
 
