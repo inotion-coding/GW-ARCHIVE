@@ -174,7 +174,6 @@ export default function Carousel() {
               grabCardX      = 0
               grabCardY      = 0
               grabCardAnim   = false
-              grabEjecting   = false
               target         = offset  // 캐러셀 위치 고정
             }
             wasCardGrab = true

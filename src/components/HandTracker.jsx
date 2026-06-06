@@ -545,7 +545,7 @@ export default function HandTracker() {
       cancelAnimationFrame(rafId)
       videoRef.current?.srcObject?.getTracks().forEach(t => t.stop())
       landmarker?.close()
-      Object.assign(handState, { dx: 0, snap: false, activePinch: false, active: false, zoomDelta: 0, click: false, back: false, rotDx: 0, cardGrab: false, cardGrabDx: 0 })
+      Object.assign(handState, { dx: 0, snap: false, activePinch: false, active: false, zoomDelta: 0, click: false, back: false, rotDx: 0, cardGrab: false, cardGrabDx: 0, cardGrabY: 0 })
     }
   }, [])
 
