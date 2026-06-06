@@ -59,6 +59,8 @@ export default function Carousel() {
     let zoomLevel = 1
     let handVel = 0
     let wasHandPinching = false
+    let wasDragPinching = false
+    let dragFree = false
 
     // 드래그 이동 거리 추적 — 짧으면 클릭으로 판정
     let dragStartX = 0
@@ -84,6 +86,7 @@ export default function Carousel() {
     }
     const onUp = () => {
       drag = false
+      dragFree = false
       handState.dragging = false
       const projected = offset + vel / (1 - FRIC)
       target = Math.round(projected)
@@ -128,6 +131,17 @@ export default function Carousel() {
       if (!drag) { vel = 0 }
 
       if (handState.active) {
+        // ── 엄지+검지 드래그 핀치 → 자유 위치 이동 ──
+        if (handState.dragPinch) {
+          const dx = handState.dragPinchDx
+          if (dx !== 0) { offset += dx; target = offset; handState.dragPinchDx = 0 }
+          dragFree = true
+          wasDragPinching = true
+        } else if (wasDragPinching) {
+          target = offset  // 놓는 순간 현재 위치 고정 (스냅 없음)
+          wasDragPinching = false
+        }
+
         if (handState.activePinch && !wasHandPinching) {
           target = offset; handVel = 0
         }
@@ -139,9 +153,11 @@ export default function Carousel() {
           target          = Math.round(offset + impulse / (1 - FRIC))
           handVel         = impulse
           handState.rotDx = 0
+          dragFree = false
         } else if (handState.dx !== 0) {
           target      += handState.dx
           handState.dx = 0
+          dragFree = false
         }
         if (handState.snap) {
           // 관성 없이 현재 위치에서 가장 가까운 카드로 즉시 스냅
@@ -151,6 +167,7 @@ export default function Carousel() {
         }
       } else {
         handVel = 0; wasHandPinching = false
+        if (wasDragPinching) { target = offset; wasDragPinching = false }
       }
 
       if (handState.click) {
@@ -165,7 +182,7 @@ export default function Carousel() {
         handState.click = false
       }
 
-      if (!drag && !handState.activePinch) {
+      if (!drag && !handState.activePinch && !handState.dragPinch && !dragFree) {
         target += (Math.round(target) - target) * 0.12
       }
 
