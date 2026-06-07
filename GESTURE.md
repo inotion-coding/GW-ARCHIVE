@@ -52,19 +52,20 @@
 
 ### 1. 엄지+중지 핀치 → 캐러셀 스크롤
 - **감지**: 엄지(4)↔중지(12) 3D 거리 / 손 크기 < `SCROLL_RATIO(0.33)` (진입) / `0.43` (유지, 히스테리시스)
-- **차단 조건**: `isFistClosed` (주먹 쥔 상태) 또는 `isHandBack` (손등 명확히 향할 때)
+- **차단 조건**: `isLooseFist` · `isIndexOnly` · `isHandBack` · `backZoneMask` (손등 ±20°)
 - **동작**: 손목 X 좌표 이동량에 `HAND_SENS(20)` 곱해 `handState.dx`로 전달
 - **해제**: `handState.snap = true` → 가장 가까운 카드로 스냅
 - **우선순위**: 양손 줌 핀치 > 스크롤 핀치
 
 ### 2. 양손 엄지+검지 핀치 → 줌
-- **감지**: 두 손 모두 엄지(4)↔검지(8) 3D 거리 / 손 크기 < `ZOOM_RATIO(0.17)`
-- **차단 조건**: 어느 한 손이라도 `isHandBack` 상태면 해당 손 핀치 비활성
+- **감지**: 두 손 모두 엄지(4)↔검지(8) 3D 거리 / 손 크기 < `ZOOM_RATIO(0.20)`
+- **차단 조건**: `isLooseFist` · `isIndexOnly` · `isHandBack` · `backZoneMask` (손등 ±20°)
 - **동작**: 두 핀치 포인트 간 거리 변화량 × `ZOOM_SENS(2.2)` → `handState.zoomDelta`
 - **범위**: 0.5 ~ `(window.innerWidth/2) / 530` (화면 폭 기반 최대)
 - **차단 조건**: 스크롤 핀치 활성 중 → 줌 비활성
 
 ### 3. 엄지+검지 단일 핀치 더블탭 → 뒤로가기
+- **차단 조건**: `isLooseFist` · `isIndexOnly` · `backZoneMask`
 - **감지**: 단일 손의 엄지(4)↔검지(8) 거리 / 손 크기 < `BACK_RATIO(0.17)` (스크롤·줌과 겹치지 않는 상태)
 - **동작**: `DB_TAP_WINDOW(25프레임)` 내 2번 탭 → `handState.back = true`
 - **조건**: 줌 핀치·스크롤 핀치 비활성일 때만 인식

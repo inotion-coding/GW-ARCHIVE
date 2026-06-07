@@ -37,6 +37,14 @@ function isFingersFolded(lm) {
   return lm[12].y > lm[10].y && lm[16].y > lm[14].y && lm[20].y > lm[18].y
 }
 
+// 느슨한 주먹 — 4손가락 끝이 모두 PIP 관절보다 낮은 위치 (isFistClosed보다 관대)
+function isLooseFist(lm) {
+  return lm[8].y > lm[6].y &&   // 검지 끝 < PIP
+         lm[12].y > lm[10].y &&  // 중지 끝 < PIP
+         lm[16].y > lm[14].y &&  // 약지 끝 < PIP
+         lm[20].y > lm[18].y     // 소지 끝 < PIP
+}
+
 // 완전한 주먹 (잠금 제스처)
 // 옆면: 4손가락 끝이 MCP(뿌리 관절)보다 아래 — PIP보다 훨씬 엄격
 // 앞면: isFingersFolded + 끝마디-손바닥 중심 거리 비율 < 0.7
@@ -304,7 +312,7 @@ export default function HandTracker() {
         if (backZoneMask[i]) return { activePinch: false, midX: 0, midY: 0 }
         const info = analyzePinch(lm, 4, 12, scrollRatio)
         if (info.activePinch) {
-          if (isFistClosed(lm)) info.activePinch = false
+          if (isLooseFist(lm) || isIndexOnly(lm)) info.activePinch = false
           const side = gestureHandedness[i]?.[0]?.categoryName
           if (side && isHandBack(lm, side)) info.activePinch = false
         }
@@ -315,14 +323,17 @@ export default function HandTracker() {
         if (backZoneMask[i]) return { activePinch: false, midX: 0, midY: 0 }
         const info = analyzePinch(lm, 4, 8, zoomRatio)
         if (info.activePinch) {
+          if (isLooseFist(lm) || isIndexOnly(lm)) info.activePinch = false
           const side = gestureHandedness[i]?.[0]?.categoryName
           if (side && isHandBack(lm, side)) info.activePinch = false
         }
         return info
       })
-      const backInfos = gestureLms.map((lm, i) =>
-        backZoneMask[i] ? { activePinch: false, midX: 0, midY: 0 } : analyzePinch(lm, 4, 8, BACK_RATIO)
-      )
+      const backInfos = gestureLms.map((lm, i) => {
+        if (backZoneMask[i] || isLooseFist(lm) || isIndexOnly(lm))
+          return { activePinch: false, midX: 0, midY: 0 }
+        return analyzePinch(lm, 4, 8, BACK_RATIO)
+      })
 
       const firstLmFist = gestureLms.find((_, i) => !backZoneMask[i]) ?? null
 
