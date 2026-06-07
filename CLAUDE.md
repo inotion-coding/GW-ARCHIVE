@@ -114,22 +114,19 @@ Get-ChildItem "_bak" | Sort-Object LastWriteTime -Descending | Select-Object -Sk
 | `chore` | 빌드·설정 변경 |
 | `test` | 테스트 추가·수정 |
 
-### 자동 커밋 규칙 (큰 작업 완료 시)
-다음 조건을 **모두** 충족하면 사용자 요청 없이도 커밋을 수행한다.
+### 커밋 규칙 (CRITICAL)
 
-| 조건 | 기준 |
-|---|---|
-| 수정 파일 수 | 2개 이상 |
-| 작업 유형 | feat / fix / refactor 완료 |
-| 빌드 영향 | 런타임 동작이 바뀌는 변경 |
+**커밋은 반드시 사용자에게 확인 후 진행한다. 임의 자동 커밋 금지.**
 
 커밋 전 체크리스트:
-1. `_bak/` 오래된 파일 정리 (최근 2개만 보존)
-2. 소스 파일만 스테이징 (`_bak/` 제외)
-3. 커밋 메시지 형식 준수
-4. 커밋 완료 후 사용자에게 커밋 해시 보고
-
-> 단순 질문 답변·설명·1개 파일 소규모 수정은 자동 커밋 대상이 아님
+1. 사용자에게 커밋 여부 확인 및 승인 받기
+2. 변경된 기능에 따라 `GESTURE.md` / `CARDS.md` 업데이트
+   - HandTracker.jsx 수정 → `GESTURE.md` 업데이트
+   - cards.js 수정 → `CARDS.md` 업데이트
+3. `_bak/` 오래된 파일 정리 (최근 2개만 보존)
+4. 소스 파일만 스테이징 (`_bak/` 제외)
+5. 커밋 메시지 형식 준수
+6. 커밋 완료 후 사용자에게 커밋 해시 보고
 
 ### 금지 사항
 ```bash
@@ -167,7 +164,9 @@ Get-ChildItem "_bak" | Sort-Object LastWriteTime -Descending | Select-Object -Sk
 - [ ] `rm` 명령어 미사용 확인
 - [ ] `mv *_bak_* _bak/` 로 이동만 수행
 
-### 커밋 시 (자동 또는 수동)
+### 커밋 시
+- [ ] 사용자 승인 확인
+- [ ] 변경 내용에 따라 `GESTURE.md` / `CARDS.md` 업데이트 완료
 - [ ] `_bak/` 최근 2개 초과 파일 삭제 완료
 - [ ] `_bak/` 가 스테이징에 포함되지 않음 확인
 - [ ] AI 서명 없음 확인
@@ -175,5 +174,14 @@ Get-ChildItem "_bak" | Sort-Object LastWriteTime -Descending | Select-Object -Sk
 
 ---
 
+## 📄 프로젝트 참조 문서
+
+| 파일 | 설명 | 업데이트 트리거 |
+|---|---|---|
+| `GESTURE.md` | 제스처 동작 명세, handState 필드, 파라미터 | HandTracker.jsx 수정 시 |
+| `CARDS.md` | 카드 1~10 상세 정보, 데이터 구조 | cards.js 또는 MotionPage 수정 시 |
+
+---
+
 **Last Updated**: 2026-06-07
-**Version**: 1.1.0
+**Version**: 1.2.0
