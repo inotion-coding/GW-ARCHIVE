@@ -17,6 +17,9 @@
 | `rotDx` | number | 손 회전 임펄스 속도 (FRIC=0.92 기준 ~5.6 카드 이동) |
 | `click` | boolean | 검지 탭 클릭 트리거 |
 | `clickX` / `clickY` | number | 클릭 시 검지 끝 좌표 (미러, 0~1) |
+| `pinchMidX` / `pinchMidY` | number | 엄지+중지 핀치 중심 좌표 (미러, 0~1) — activePinch 시 유효 |
+| `indexPinchActive` | boolean | 단일 손 엄지+검지 핀치 활성 (스크롤·줌 비활성 시) |
+| `indexPinchMidX` / `indexPinchMidY` | number | 엄지+검지 핀치 중심 좌표 (미러, 0~1) — indexPinchActive 시 유효 |
 | `back` | boolean | 더블탭 → 이전 페이지 트리거 |
 | `dragging` | boolean | 마우스/터치 드래그 중 (회전 제스처 차단용) |
 | `dismissDrag` | number | 양손 수직 드래그량 (양수=아래, 음수=위) |
@@ -58,11 +61,11 @@
 
 ## 제스처 목록
 
-### 1. 엄지+중지 핀치 → 캐러셀 스크롤
+### 1. 엄지+중지 핀치 → 캐러셀 스크롤 / SchedulePage 세로 스크롤
 - **감지**: 엄지(4)↔중지(12) 3D 거리 / 손 크기 < `SCROLL_RATIO(0.33)` (진입) / `0.43` (유지, 히스테리시스)
 - **차단 조건**: `isLooseFist` · `isIndexOnly` · `isHandBack` · `backZoneMask` (손등 ±20°)
-- **동작**: 손목 X 좌표 이동량에 `HAND_SENS(20)` 곱해 `handState.dx`로 전달
-- **해제**: `handState.snap = true` → 가장 가까운 카드로 스냅
+- **Carousel**: 손목 X 이동량 × `HAND_SENS(26)` → `handState.dx`, 해제 시 `snap = true` → 스냅
+- **SchedulePage**: `pinchMidY` 프레임 간 델타 × `H × 1.75` → `.sch-list` scrollTop 직접 조작
 - **우선순위**: 양손 줌 핀치 > 스크롤 핀치
 
 ### 2. 양손 엄지+검지 핀치 → 줌
@@ -72,10 +75,13 @@
 - **범위**: 0.5 ~ `(window.innerWidth/2) / 530` (화면 폭 기반 최대)
 - **차단 조건**: 스크롤 핀치 활성 중 → 줌 비활성
 
-### 3. 엄지+검지 단일 핀치 더블탭 → 뒤로가기
+### 3. 엄지+검지 단일 핀치 → 캘린더 날짜 선택 / 더블탭 → 뒤로가기
 - **차단 조건**: `isLooseFist` · `isIndexOnly` · `backZoneMask`
-- **감지**: 단일 손의 엄지(4)↔검지(8) 거리 / 손 크기 < `BACK_RATIO(0.17)` (스크롤·줌과 겹치지 않는 상태)
-- **동작**: `DB_TAP_WINDOW(25프레임)` 내 2번 탭 → `handState.back = true`
+- **감지**: 단일 손의 엄지(4)↔검지(8) 거리 / 손 크기 < `BACK_RATIO(0.25)` (스크롤·줌 비활성 시)
+- **날짜 선택**: 핀치 활성 상태(`indexPinchActive`)에서 `indexPinchMidX/Y` 기준 `[data-day]` 셀 hit-test
+  - 핀치 rising edge 시 해당 날짜 선택, 유지 이동 시 hover 하이라이트 추적
+  - CalendarView(overlay) 및 CalendarPage(`/motion/3`) 모두 적용
+- **뒤로가기**: `DB_TAP_WINDOW(9프레임)` 내 2번 탭 → `handState.back = true`
 - **조건**: 줌 핀치·스크롤 핀치 비활성일 때만 인식
 
 ### 4. 검지 단독 탭 → 카드 클릭
@@ -165,4 +171,4 @@ detect(ts) 매 프레임 (30fps 캡)
 
 ---
 
-**Last Updated**: 2026-06-07 (좌우 dismiss 양손 양방향 + dismissActive 중간 스톱 추가)
+**Last Updated**: 2026-06-07 (indexPinch 날짜 선택·dismiss overlay·SchedulePage 스크롤 추가)

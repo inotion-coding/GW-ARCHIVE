@@ -1,7 +1,9 @@
-import { useState, useEffect, useRef } from 'react'
-import handState from '../utils/handState'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { CALENDAR_EVENTS } from '../data/calendarEvents'
+import handState from '../utils/handState'
 import '../styles/calendar-view.css'
+import '../styles/calendar-page.css'
 
 const WEEKDAYS  = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
 const MONTHS    = ['January','February','March','April','May','June',
@@ -23,15 +25,15 @@ function buildCells(year, month) {
   return cells
 }
 
-export default function CalendarView() {
-  const today = new Date()
+export default function CalendarPage() {
+  const navigate = useNavigate()
+  const today    = new Date()
 
-  const [visible,   setVisible]   = useState(false)
   const [viewYear,  setViewYear]  = useState(today.getFullYear())
   const [viewMonth, setViewMonth] = useState(today.getMonth())
   const [selected,  setSelected]  = useState(today.getDate())
-  const visibleRef = useRef(false)
 
+  // 뒤로가기 + 핀치 셀 선택 통합 루프
   useEffect(() => {
     let rafId
     let wasIndexPinch = false
@@ -50,44 +52,28 @@ export default function CalendarView() {
     }
 
     function poll() {
-      const show = handState.dismissed && handState.dismissDir === 'up'
-      if (show !== visibleRef.current) {
-        visibleRef.current = show
-        setVisible(show)
-      }
+      if (handState.back) { handState.back = false; navigate('/'); return }
 
-      if (show) {
-        // 엄지+검지 핀치만 날짜 선택
-        const idxPinch = handState.indexPinchActive
-        if (idxPinch) {
-          const cell = hitTest(handState.indexPinchMidX, handState.indexPinchMidY)
-          applyHover(cell)
-          if (!wasIndexPinch && cell?.dataset?.day) setSelected(Number(cell.dataset.day))
-        } else {
-          applyHover(null)
-        }
-        wasIndexPinch = idxPinch
+      // 엄지+검지 핀치만 날짜 선택
+      const idxPinch = handState.indexPinchActive
+      if (idxPinch) {
+        const cell = hitTest(handState.indexPinchMidX, handState.indexPinchMidY)
+        applyHover(cell)
+        if (!wasIndexPinch && cell?.dataset?.day) setSelected(Number(cell.dataset.day))
       } else {
         applyHover(null)
-        wasIndexPinch = false
       }
-
+      wasIndexPinch = idxPinch
       rafId = requestAnimationFrame(poll)
     }
+
     rafId = requestAnimationFrame(poll)
     return () => {
       cancelAnimationFrame(rafId)
+      handState.back = false
       hoveredCell?.classList.remove('cal-cell--pinch-hover')
     }
-  }, [])
-
-  useEffect(() => {
-    if (visible) {
-      setViewYear(today.getFullYear())
-      setViewMonth(today.getMonth())
-      setSelected(today.getDate())
-    }
-  }, [visible])
+  }, [navigate])
 
   const prevMonth = () => {
     if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11) }
@@ -118,11 +104,10 @@ export default function CalendarView() {
   }
 
   return (
-    <div className={`calendar-view${visible ? ' calendar-view--visible' : ''}`}>
+    <div className="cal-page-root">
+      <button className="cal-page-back" onClick={() => navigate('/')}>←</button>
 
-      {/* ── 달력 패널 (좌 2/3) ── */}
       <div className="cal-panel">
-
         <div className="cal-header">
           <button className="cal-nav" onClick={prevMonth}>‹</button>
           <span className="cal-month-label">
@@ -177,10 +162,8 @@ export default function CalendarView() {
             </span>
           ))}
         </div>
-
       </div>
 
-      {/* ── 일정 패널 (우 1/3) ── */}
       <div className="schedule-panel">
         <div className="schedule-header">
           <span className="schedule-weekday">{DAY_NAMES[selectedObj.getDay()]}</span>
@@ -206,7 +189,6 @@ export default function CalendarView() {
           }
         </div>
       </div>
-
     </div>
   )
 }

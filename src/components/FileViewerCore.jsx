@@ -26,7 +26,7 @@ function FileContent({ file }) {
     )
   }
   if (file.type === 'pdf') {
-    return <embed src={file.url} type="application/pdf" className="fv-media-pdf" />
+    return <iframe src={file.url} className="fv-media-pdf" title={file.name} />
   }
   return (
     <div
@@ -96,13 +96,6 @@ export default function FileViewerCore() {
             : <>
                 <span className="fv-drop-arrow">↑</span>
                 <span className="fv-hint">Drop or click</span>
-                <span className="fv-types">
-                  문서: md · docx · odt · hwpx · epub · rtf<br/>
-                  시트: xlsx · xls · ods · csv<br/>
-                  슬라이드: pptx · odp<br/>
-                  미디어: 이미지 · 영상 · 음악<br/>
-                  기타: pdf · 코드 · txt · json
-                </span>
               </>
           }
         </div>
@@ -142,7 +135,7 @@ export default function FileViewerCore() {
             <div className="fv-empty-state">
               <span className="fv-empty-icon">□</span>
               <span className="fv-empty-label">No file selected</span>
-              <span className="fv-empty-sub">파일을 올리면 여기서 미리볼 수 있습니다</span>
+              <span className="fv-empty-sub">Drop a file to preview it here</span>
             </div>
           )
           : (

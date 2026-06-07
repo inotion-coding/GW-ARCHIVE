@@ -6,8 +6,9 @@ export default function Footer() {
   const [rightLocked,  setRightLocked]  = useState(() => handState.rightLocked)
   const [leftProgress, setLeftProgress] = useState(0)
   const [rightProgress,setRightProgress]= useState(0)
-  const [leftFlash,    setLeftFlash]    = useState(null)  // null | 'lock' | 'unlock'
+  const [leftFlash,    setLeftFlash]    = useState(null)
   const [rightFlash,   setRightFlash]   = useState(null)
+  const [dismissed,    setDismissed]    = useState(false)
 
   const mountedRef = useRef(true)
 
@@ -15,6 +16,7 @@ export default function Footer() {
     mountedRef.current = true
     const timer = setInterval(() => {
       if (!mountedRef.current) return
+      setDismissed(handState.dismissed)
       setLeftLocked(handState.leftLocked)
       setRightLocked(handState.rightLocked)
       setLeftProgress(handState.leftLockProgress)
@@ -42,7 +44,7 @@ export default function Footer() {
 
   return (
     <footer>
-      <div className="lock-status">
+      <div className={`lock-status${dismissed ? ' lock-status--hidden' : ''}`}>
         <LockItem label="Left"  locked={leftLocked}  progress={leftProgress}  flash={leftFlash}  />
         <div className="lock-sep" />
         <LockItem label="Right" locked={rightLocked} progress={rightProgress} flash={rightFlash} />
@@ -62,10 +64,7 @@ function LockItem({ label, locked, progress, flash }) {
         {locked ? 'Locked' : 'Unlocked'}
       </span>
       <div className={`lock-gauge-wrap${showGauge ? ' gauge-active' : ''}${flash ? ` gauge-flash-${flash}` : ''}`}>
-        <div
-          className="lock-gauge-fill"
-          style={{ width: `${fillPct}%` }}
-        />
+        <div className="lock-gauge-fill" style={{ width: `${fillPct}%` }} />
       </div>
     </div>
   )

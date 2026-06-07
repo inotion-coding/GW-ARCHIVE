@@ -1,0 +1,235 @@
+:root {
+  --cat-work:     #5b8dee;
+  --cat-personal: #e07b54;
+  --cat-health:   #5bbf8d;
+  --cat-social:   #b07be0;
+}
+
+.sch-root {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 80px 52px 44px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.sch-back {
+  position: fixed;
+  top: 24px;
+  left: 24px;
+  z-index: 10;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  padding: 7px 13px;
+  cursor: pointer;
+  opacity: 0.45;
+  transition: opacity 0.14s, border-color 0.14s;
+}
+.sch-back:hover { opacity: 1; border-color: var(--text); }
+
+/* ── 상단 헤더 ── */
+.sch-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 32px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sch-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sch-label {
+  font-size: 10px;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--text);
+  opacity: 0.4;
+}
+
+.sch-today {
+  font-size: 22px;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  opacity: 0.82;
+}
+
+.sch-stats {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.sch-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.sch-stat-num {
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  opacity: 0.7;
+}
+
+.sch-stat-label {
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text);
+  opacity: 0.35;
+}
+
+.sch-stat-sep {
+  width: 1px;
+  height: 28px;
+  background: var(--border);
+  opacity: 0.25;
+}
+
+/* ── 이벤트 목록 ── */
+.sch-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-right: 16px;
+}
+
+/* ── 날짜 그룹 ── */
+.sch-group {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── 날짜 컬럼 ── */
+.sch-date-col {
+  flex: 0 0 96px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding: 16px 24px 16px 0;
+  gap: 1px;
+}
+
+.sch-date-col--today .sch-date-num { opacity: 1; }
+
+.sch-date-day {
+  font-size: 9px;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: var(--text);
+  opacity: 0.38;
+}
+
+.sch-date-num {
+  font-size: 28px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  opacity: 0.75;
+}
+
+.sch-date-mon {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text);
+  opacity: 0.35;
+}
+
+.sch-today-tag {
+  margin-top: 6px;
+  font-size: 8px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text);
+  border: 1px solid var(--text);
+  padding: 2px 5px;
+  opacity: 0.55;
+  align-self: flex-start;
+}
+
+/* ── 이벤트 행들 ── */
+.sch-events {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding-left: 24px;
+}
+
+.sch-event {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+  opacity: 0.75;
+  transition: opacity 0.12s;
+}
+.sch-event:last-child { border-bottom: none; }
+.sch-event:hover { opacity: 1; }
+
+.sch-cat-bar {
+  width: 2px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 1px;
+}
+.sch-cat-bar--work     { background: var(--cat-work); }
+.sch-cat-bar--personal { background: var(--cat-personal); }
+.sch-cat-bar--health   { background: var(--cat-health); }
+.sch-cat-bar--social   { background: var(--cat-social); }
+
+.sch-time {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--text);
+  opacity: 0.5;
+  flex-shrink: 0;
+  width: 38px;
+}
+
+.sch-title {
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  flex: 1;
+}
+
+.sch-badge {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.sch-badge--work     { color: var(--cat-work);     background: rgba(91,141,238,0.10); }
+.sch-badge--personal { color: var(--cat-personal); background: rgba(224,123,84,0.10); }
+.sch-badge--health   { color: var(--cat-health);   background: rgba(91,191,141,0.10); }
+.sch-badge--social   { color: var(--cat-social);   background: rgba(176,123,224,0.10); }
+
+.sch-empty {
+  padding: 40px 0;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text);
+  opacity: 0.3;
+}

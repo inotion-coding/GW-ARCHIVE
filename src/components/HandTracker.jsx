@@ -386,6 +386,19 @@ export default function HandTracker() {
       }
       wasBackPinching = isSingleZoomPinch
 
+      // 단일 엄지+검지 핀치 중심 노출 (캘린더 날짜 선택용)
+      handState.indexPinchActive = isSingleZoomPinch
+      if (isSingleZoomPinch) {
+        const bi = backInfos.findIndex(b => b.activePinch)
+        if (bi >= 0) {
+          handState.indexPinchMidX = 1 - backInfos[bi].midX
+          handState.indexPinchMidY = backInfos[bi].midY
+        }
+      } else {
+        handState.indexPinchMidX = 0
+        handState.indexPinchMidY = 0
+      }
+
       // 쿨다운 카운트다운
       for (const side of ['Left', 'Right']) {
         if (rollState[side].cooldown > 0) {
@@ -636,9 +649,13 @@ export default function HandTracker() {
                 handState.dx = Math.abs(raw) > DX_DEAD_ZONE ? raw * HAND_SENS : 0
               }
               lastX = mirroredX
+              const sInfo = scrollInfos[scrollActive]
+              handState.pinchMidX = 1 - sInfo.midX
+              handState.pinchMidY = sInfo.midY
             } else {
               if (wasPinching) { handState.snap = true }
               lastX = null; handState.dx = 0
+              handState.pinchMidX = 0; handState.pinchMidY = 0
             }
 
             wasPinching = !!activeLm

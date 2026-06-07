@@ -8,5 +8,5 @@ export const CARDS = [
   { id: 7,  title: 'Placeholder 2', img: 'https://images.unsplash.com/photo-1558591710-4b4a1ae0f04d?w=600', color: '#c8c0b0' },
   { id: 8,  title: 'Placeholder 3', img: 'https://images.unsplash.com/photo-1618005198919-d3d4b5a92ead?w=600', color: '#b8b0b0' },
   { id: 9,  title: 'Placeholder 4', img: 'https://images.unsplash.com/photo-1504548840739-580b10ae7715?w=600', color: '#a8b8a8' },
-  { id: 10, title: 'Placeholder 5', img: 'https://images.unsplash.com/photo-1632059368252-be6d65abc4e2?w=600', color: '#c0c8b0' },
+  { id: 10, title: 'Documents',     img: 'https://images.unsplash.com/photo-1632059368252-be6d65abc4e2?w=600', color: '#c0c8b0' },
 ]

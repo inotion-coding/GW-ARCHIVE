@@ -1,0 +1,33 @@
+.cal-page-root {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: stretch;
+  padding: 80px 52px 44px;
+  background: var(--bg);
+}
+
+.cal-page-back {
+  position: fixed;
+  top: 24px;
+  left: 24px;
+  z-index: 10;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  padding: 7px 13px;
+  cursor: pointer;
+  opacity: 0.45;
+  transition: opacity 0.14s, border-color 0.14s;
+}
+.cal-page-back:hover { opacity: 1; border-color: var(--text); }
+
+/* 핀치 hover — 손 포인터가 셀 위에 있을 때 */
+.cal-cell--pinch-hover {
+  background: rgba(128, 128, 128, 0.12);
+  outline: 1px solid var(--border);
+  outline-offset: -1px;
+}

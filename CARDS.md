@@ -28,7 +28,7 @@
 | 7 | 7 | Placeholder 2 | `#c8c0b0` | 흰색 물결 능선 조형 (3D 추상) |
 | 8 | 8 | Placeholder 3 | `#b8b0b0` | 라벤더·옐로 파스텔 구체 (3D 추상) |
 | 9 | 9 | Placeholder 4 | `#a8b8a8` | 흰 모래 물결 질감 (3D 추상) |
-| 10 | 10 | Placeholder 5 | `#c0c8b0` | 블랙 광택 조형물 (3D 추상) |
+| 10 | 10 | Documents | `#c0c8b0` | 블랙 광택 조형물 (3D 추상) |
 
 ---
 
@@ -75,9 +75,10 @@
 - **주제**: 미정
 - **상태**: 콘텐츠 미구현
 
-### Card 10 — Placeholder 5
-- **주제**: 미정
-- **상태**: 콘텐츠 미구현
+### Card 10 — Documents
+- **주제**: 문서 뷰어
+- **설명**: 로컬 파일 드롭으로 문서(md, docx, doc, pdf, xlsx, pptx, hwpx 등) 미리보기. FileViewerPage(`/motion/10`)로 라우팅.
+- **상태**: 구현 완료
 
 ---
 
@@ -88,4 +89,4 @@
 
 ---
 
-**Last Updated**: 2026-06-07 (전체 카드 이미지 추상 CGI/3D 스타일 통일)
+**Last Updated**: 2026-06-07 (Card 10 Placeholder 5 → Documents 문서 뷰어로 변경)

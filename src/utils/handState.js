@@ -8,6 +8,11 @@ const handState = {
   click:       false,  // 검지 단독 탭 클릭 트리거
   clickX:      0,      // 클릭 시 검지 X 좌표 (미러, 0~1)
   clickY:      0,      // 클릭 시 검지 Y 좌표 (0~1)
+  pinchMidX:      0,   // 엄지+중지 핀치 중심 X (미러, 0~1) — activePinch 시 유효
+  pinchMidY:      0,   // 엄지+중지 핀치 중심 Y (0~1)
+  indexPinchActive: false, // 단일 손 엄지+검지 핀치 활성 (더블탭 아닌 지속 상태)
+  indexPinchMidX:   0,     // 엄지+검지 핀치 중심 X (미러, 0~1)
+  indexPinchMidY:   0,     // 엄지+검지 핀치 중심 Y (0~1)
   back:        false,  // 더블탭 → 이전 페이지 트리거
   rotDx:       0,      // 손 회전: 오른손(+), 왼손(−) → 연속 스크롤 속도
   dragging:    false,  // 마우스/터치 드래그 중 (회전 제스처 차단용)

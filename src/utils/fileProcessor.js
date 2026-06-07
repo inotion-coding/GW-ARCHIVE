@@ -19,7 +19,7 @@ export const CODE_EXTS  = new Set([
 
 export const ACCEPT = [
   '.md','.txt','.log','.rtf',
-  '.docx','.odt','.hwpx','.hwp',
+  '.doc','.docx','.odt','.hwpx','.hwp',
   '.pdf',
   '.xlsx','.xls','.ods','.csv',
   '.pptx','.odp',
@@ -36,7 +36,7 @@ export const ACCEPT = [
 
 export const EXT_LABEL = {
   md:'MD', txt:'TXT', log:'LOG', rtf:'RTF',
-  docx:'DOC', odt:'ODT', hwpx:'HWPX', hwp:'HWP',
+  doc:'DOC', docx:'DOC', odt:'ODT', hwpx:'HWPX', hwp:'HWP',
   pdf:'PDF',
   xlsx:'XLS', xls:'XLS', ods:'ODS', csv:'CSV',
   pptx:'PPT', odp:'ODP', epub:'EPUB',
@@ -84,6 +84,49 @@ function highlightCode(code, ext) {
   }
 }
 
+// ── DOC 바이너리 텍스트 추출 (OLE Compound Document)
+function extractDocText(buffer) {
+  const bytes = new Uint8Array(buffer)
+
+  // ZIP 시그니처 (PK) → 실제로는 .docx → mammoth에게 위임
+  if (bytes[0] === 0x50 && bytes[1] === 0x4B) return null
+
+  // OLE2 시그니처 확인
+  if (bytes[0] !== 0xD0 || bytes[1] !== 0xCF) return null
+
+  const texts = []
+  let run = []
+
+  // 섹터 헤더(512바이트) 이후부터 UTF-16LE 텍스트 스캔
+  for (let i = 512; i < bytes.length - 1; i += 2) {
+    const cp = bytes[i] | (bytes[i + 1] << 8)
+    const ok = (cp >= 0x0020 && cp <= 0x007E)   // ASCII printable
+      || (cp >= 0x00C0 && cp <= 0x024F)           // Latin extended
+      || (cp >= 0x0400 && cp <= 0x04FF)           // Cyrillic
+      || (cp >= 0x4E00 && cp <= 0x9FFF)           // CJK
+      || (cp >= 0xAC00 && cp <= 0xD7A3)           // Korean Hangul
+      || cp === 0x000A || cp === 0x000D           // newline
+
+    if (ok) {
+      run.push(cp === 0x000D ? '' : String.fromCharCode(cp))
+    } else {
+      if (run.length >= 8) {
+        const s = run.join('').trim()
+        const letters = (s.match(/[a-zA-Z가-힣一-鿿Ѐ-ӿ]/g) ?? []).length
+        if (letters / s.length > 0.38) texts.push(s)
+      }
+      run = []
+    }
+  }
+  if (run.length >= 8) {
+    const s = run.join('').trim()
+    const letters = (s.match(/[a-zA-Z가-힣一-鿿Ѐ-ӿ]/g) ?? []).length
+    if (letters / s.length > 0.38) texts.push(s)
+  }
+
+  return texts.length ? texts : null
+}
+
 // ── RTF 텍스트 추출
 function parseRtf(raw) {
   let s = raw
@@ -93,7 +136,7 @@ function parseRtf(raw) {
   s = s.replace(/\n{3,}/g, '\n\n').trim()
   return s
     ? `<pre class="fv-plain">${s.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</pre>`
-    : '<p class="fv-empty-msg">내용 없음</p>'
+    : '<p class="fv-empty-msg">No content</p>'
 }
 
 // ── PPTX 슬라이드 XML 파싱
@@ -119,7 +162,7 @@ async function parseHwpx(zip) {
   const keys = Object.keys(zip.files)
     .filter(k => /^Contents\/section\d+\.xml$/i.test(k))
     .sort((a, b) => parseInt(a.match(/(\d+)/)[1]) - parseInt(b.match(/(\d+)/)[1]))
-  if (!keys.length) return '<p class="fv-empty-msg">본문 섹션 없음</p>'
+  if (!keys.length) return '<p class="fv-empty-msg">No sections found</p>'
 
   const parts = []
   for (let i = 0; i < keys.length; i++) {
@@ -137,13 +180,13 @@ async function parseHwpx(zip) {
     if (paras.length)
       parts.push(`<div class="fv-slide"><div class="fv-slide-num">Section ${i+1}</div>${paras.map(p=>`<p>${p}</p>`).join('')}</div>`)
   }
-  return parts.join('') || '<p class="fv-empty-msg">텍스트 없음</p>'
+  return parts.join('') || '<p class="fv-empty-msg">No text found</p>'
 }
 
 // ── ODT / ODP (OpenDocument ZIP XML)
 async function parseOpenDocument(zip, ext) {
   const xml = await zip.files['content.xml']?.async('string')
-  if (!xml) return '<p class="fv-empty-msg">content.xml 없음</p>'
+  if (!xml) return '<p class="fv-empty-msg">content.xml not found</p>'
 
   if (ext === 'odp') {
     const slides = []; let n = 0
@@ -156,7 +199,7 @@ async function parseOpenDocument(zip, ext) {
         .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').trim()
       if (text) slides.push(`<div class="fv-slide"><div class="fv-slide-num">Slide ${n}</div><p>${text}</p></div>`)
     }
-    return slides.join('') || '<p class="fv-empty-msg">텍스트 없음</p>'
+    return slides.join('') || '<p class="fv-empty-msg">No text found</p>'
   }
 
   // ODT
@@ -169,21 +212,21 @@ async function parseOpenDocument(zip, ext) {
       .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').trim()
     if (text) paras.push(text)
   }
-  return paras.map(p=>`<p>${p}</p>`).join('') || '<p class="fv-empty-msg">텍스트 없음</p>'
+  return paras.map(p=>`<p>${p}</p>`).join('') || '<p class="fv-empty-msg">No text found</p>'
 }
 
 // ── EPUB
 async function parseEpub(zip) {
   const container = await zip.files['META-INF/container.xml']?.async('string')
-  if (!container) return '<p class="fv-empty-msg">container.xml 없음</p>'
+  if (!container) return '<p class="fv-empty-msg">container.xml not found</p>'
 
   const opfMatch = container.match(/full-path="([^"]+\.opf)"/)
-  if (!opfMatch) return '<p class="fv-empty-msg">OPF 없음</p>'
+  if (!opfMatch) return '<p class="fv-empty-msg">OPF not found</p>'
 
   const opfPath = opfMatch[1]
   const opfDir  = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : ''
   const opf     = await zip.files[opfPath]?.async('string')
-  if (!opf) return '<p class="fv-empty-msg">OPF 읽기 실패</p>'
+  if (!opf) return '<p class="fv-empty-msg">Failed to read OPF</p>'
 
   const manifest = {}
   const mRe = /<item[^>]+id="([^"]+)"[^>]+href="([^"]+)"/g; let mm
@@ -211,7 +254,7 @@ async function parseEpub(zip) {
       parts.push(`<div class="fv-epub-chapter">${pars}</div>`)
     }
   }
-  return parts.join('<div class="fv-sheet-sep"></div>') || '<p class="fv-empty-msg">내용 없음</p>'
+  return parts.join('<div class="fv-sheet-sep"></div>') || '<p class="fv-empty-msg">No content</p>'
 }
 
 // ── 메인 파일 처리 함수
@@ -246,6 +289,22 @@ export async function processFile(file) {
       const result = await mammoth.convertToHtml({ arrayBuffer: await file.arrayBuffer() })
       return { name: file.name, ext, type: 'html', html: result.value }
     }
+    if (ext === 'doc') {
+      const buf = await file.arrayBuffer()
+      // ZIP 시그니처면 실제로 docx — mammoth로 처리
+      const sig = new Uint8Array(buf, 0, 2)
+      if (sig[0] === 0x50 && sig[1] === 0x4B) {
+        const result = await mammoth.convertToHtml({ arrayBuffer: buf })
+        return { name: file.name, ext, type: 'html', html: result.value }
+      }
+      // OLE 바이너리 .doc — 텍스트 스캔
+      const texts = extractDocText(buf)
+      if (!texts) {
+        return { name: file.name, ext, type: 'html', html: '<p class="fv-err">Could not read this .doc file.<br>Please save it as <strong>.docx</strong> and try again.</p>' }
+      }
+      const html = texts.map(t => `<p>${t.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`).join('')
+      return { name: file.name, ext, type: 'html', html: `<div class="fv-doc-plain">${html}</div>` }
+    }
     if (SHEET_EXTS.has(ext)) {
       const wb   = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: 'array' })
       const html = wb.SheetNames
@@ -254,7 +313,7 @@ export async function processFile(file) {
       return { name: file.name, ext, type: 'html', html }
     }
     if (ext === 'hwp') {
-      return { name: file.name, ext, type: 'html', html: '<p class="fv-err">HWP 바이너리 형식은 브라우저에서 직접 파싱할 수 없습니다.<br>파일을 <strong>HWPX</strong> 또는 <strong>DOCX</strong> 형식으로 저장한 후 다시 시도하세요.</p>' }
+      return { name: file.name, ext, type: 'html', html: '<p class="fv-err">HWP binary format cannot be parsed in the browser.<br>Please save the file as <strong>HWPX</strong> or <strong>DOCX</strong> and try again.</p>' }
     }
     // ZIP 기반 포맷
     const zip = await JSZip.loadAsync(await file.arrayBuffer())
@@ -263,14 +322,14 @@ export async function processFile(file) {
         .filter(k => /^ppt\/slides\/slide\d+\.xml$/.test(k))
         .sort((a, b) => parseInt(a.match(/(\d+)/)[1]) - parseInt(b.match(/(\d+)/)[1]))
       const slides = await Promise.all(keys.map(async (k, i) => parsePptxXml(await zip.files[k].async('string'), i + 1)))
-      return { name: file.name, ext, type: 'html', html: slides.filter(Boolean).join('') || '<p class="fv-empty-msg">텍스트 없음</p>' }
+      return { name: file.name, ext, type: 'html', html: slides.filter(Boolean).join('') || '<p class="fv-empty-msg">No text found</p>' }
     }
     if (ext === 'hwpx') return { name: file.name, ext, type: 'html', html: await parseHwpx(zip) }
     if (ext === 'odt' || ext === 'odp') return { name: file.name, ext, type: 'html', html: await parseOpenDocument(zip, ext) }
     if (ext === 'epub') return { name: file.name, ext, type: 'html', html: await parseEpub(zip) }
 
-    return { name: file.name, ext, type: 'html', html: '<p class="fv-empty-msg">지원하지 않는 형식입니다.</p>' }
+    return { name: file.name, ext, type: 'html', html: '<p class="fv-empty-msg">Unsupported format</p>' }
   } catch (err) {
-    return { name: file.name, ext, type: 'html', html: `<p class="fv-err">파싱 오류: ${err.message}</p>` }
+    return { name: file.name, ext, type: 'html', html: `<p class="fv-err">Parse error: ${err.message}</p>` }
   }
 }
