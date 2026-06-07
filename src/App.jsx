@@ -4,6 +4,7 @@ import Carousel from './components/Carousel'
 import Footer from './components/Footer'
 import HandTracker from './components/HandTracker'
 import MotionPage from './pages/MotionPage'
+import TimerPage from './pages/TimerPage'
 import './styles/motion-page.css'
 
 export default function App() {
@@ -21,6 +22,7 @@ export default function App() {
             <Footer />
           </>
         } />
+        <Route path="/motion/5"   element={<TimerPage />} />
         <Route path="/motion/:id" element={<MotionPage />} />
       </Routes>
     </>

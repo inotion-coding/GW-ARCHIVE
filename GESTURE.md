@@ -37,7 +37,7 @@
 | `DX_DEAD_ZONE` | 0.004 | 핀치 이동 데드존 |
 | `ZOOM_SENS` | 2.2 | 줌 감도 |
 | `TAP_THRESHOLD` | 0.04 | 탭 인식 최소 아래쪽 이동량 |
-| `DB_TAP_WINDOW` | 25 frames (~0.8초) | 더블탭 인식 시간 창 |
+| `DB_TAP_WINDOW` | 9 frames (~0.3초) | 더블탭 인식 시간 창 |
 | `FIST_HOLD_FRAMES` | 15 frames (~0.5초) | 주먹 유지 필요 프레임 |
 | `INACTIVITY_FRAMES` | 1800 frames (~60초) | 자동 잠금 비활성 프레임 |
 | `FLASH_FRAMES` | 45 frames (~1.5초) | 잠금 토글 후 쿨다운 |

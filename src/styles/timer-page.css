@@ -1,0 +1,145 @@
+.timer-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: 36px;
+  color: var(--text);
+}
+
+/* ── 링 + 숫자 ── */
+.timer-ring-wrap {
+  position: relative;
+  width: 280px;
+  height: 280px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.timer-ring-wrap svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.timer-display {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  font-family: 'Courier Prime', monospace;
+  font-size: 62px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  transition: opacity 0.4s;
+}
+
+.timer-display.timer-finished {
+  opacity: 0.25;
+}
+
+.timer-colon {
+  font-size: 50px;
+  opacity: 0.4;
+  margin: 0 2px;
+  transition: opacity 0.12s;
+}
+
+.timer-display.timer-running .timer-colon {
+  animation: colon-blink 1s step-end infinite;
+}
+
+@keyframes colon-blink {
+  50% { opacity: 0; }
+}
+
+/* ── 프리셋 버튼 ── */
+.timer-presets {
+  display: flex;
+  gap: 10px;
+}
+
+.timer-preset {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: 'Courier Prime', monospace;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  padding: 8px 18px;
+  cursor: pointer;
+  opacity: 0.38;
+  transition: opacity 0.2s, background 0.2s;
+}
+
+.timer-preset:hover {
+  opacity: 0.72;
+  background: rgba(128, 128, 128, 0.08);
+}
+
+.timer-preset.active {
+  opacity: 1;
+  border-color: var(--text);
+}
+
+/* ── 제어 버튼 ── */
+.timer-controls {
+  display: flex;
+  gap: 14px;
+}
+
+.timer-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: 'Courier Prime', monospace;
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  padding: 12px 36px;
+  cursor: pointer;
+  transition: background 0.2s, opacity 0.2s;
+}
+
+.timer-btn:hover:not(:disabled) {
+  background: rgba(128, 128, 128, 0.09);
+}
+
+.timer-btn:disabled {
+  opacity: 0.22;
+  cursor: default;
+}
+
+.timer-btn--main {
+  min-width: 130px;
+}
+
+.timer-btn--reset {
+  opacity: 0.42;
+}
+
+.timer-btn--reset:hover {
+  opacity: 0.85;
+}
+
+/* ── 검지 hover 강조 ── */
+button.finger-hover {
+  background: rgba(128, 128, 128, 0.14);
+  outline: 1px solid var(--text);
+  outline-offset: 2px;
+}
+
+/* ── 완료 메시지 ── */
+.timer-done {
+  font-family: 'Courier Prime', monospace;
+  font-size: 13px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  animation: pulse-opacity 1.6s ease-in-out infinite;
+}
+
+@keyframes pulse-opacity {
+  0%, 100% { opacity: 0.35; }
+  50%       { opacity: 0.9;  }
+}

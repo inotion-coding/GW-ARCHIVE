@@ -59,6 +59,10 @@ export default function Carousel() {
     let zoomLevel = 1
     let handVel = 0
     let wasHandPinching = false
+    let dismissY         = 0     // 씬 수직 오프셋 — easing으로 부드럽게 추적 (px)
+    let dismissTarget    = 0     // dismiss 목표값 — 드래그·물리 결정 (px)
+    let dismissed        = false // 완전히 화면 밖으로 사라진 상태
+    let dismissDragStartY = null // restore 드래그 시작 시점의 dismissTarget
 
     // 드래그 이동 거리 추적 — 짧으면 클릭으로 판정
     let dragStartX = 0
@@ -127,6 +131,13 @@ export default function Carousel() {
     function tick() {
       if (!drag) { vel = 0 }
 
+      // 카드가 화면 밖에 있을 때 일반 제스처 억제 (dismiss 드래그는 허용)
+      const H = window.innerHeight
+      if (dismissed && dismissY > H * 0.6) {
+        handState.dx = 0; handState.snap = false
+        handState.click = false; handState.zoomDelta = 0
+      }
+
       if (handState.active) {
         if (handState.activePinch && !wasHandPinching) {
           target = offset; handVel = 0
@@ -174,7 +185,43 @@ export default function Carousel() {
         zoomLevel = Math.max(0.5, Math.min(maxZoom, zoomLevel + handState.zoomDelta))
         handState.zoomDelta = 0
       }
-      scene.style.transform = `scale(${zoomLevel.toFixed(3)})`
+
+      // ── Dismiss / Restore ──
+      // dismissTarget: 드래그/물리가 결정하는 목표값 (30fps 업데이트)
+      // dismissY: dismissTarget을 easing으로 추적 (60fps → 부드러운 렌더링)
+      const DISMISS_THRESH = H * 0.30
+      const OFF_SCREEN_Y   = H + 80   // 화면 바로 아래
+      const DISMISS_EASE   = 0.12     // target 추적 속도
+
+      if (handState.dismissDrag !== 0) {
+        if (dismissDragStartY === null) dismissDragStartY = dismissTarget
+        dismissTarget = Math.max(0, dismissTarget + handState.dismissDrag * H * 3.0)
+        handState.dismissDrag = 0
+        // restore: 시작점 대비 THRESH 이상 위로 올렸을 때 확정 → target을 0으로
+        if (dismissed && dismissDragStartY - dismissTarget > DISMISS_THRESH) {
+          dismissed = false
+          dismissTarget = 0
+        }
+      } else {
+        dismissDragStartY = null
+        if (dismissed) {
+          dismissTarget = OFF_SCREEN_Y
+        } else if (dismissTarget > DISMISS_THRESH) {
+          dismissed = true
+          dismissTarget = OFF_SCREEN_Y
+        } else {
+          dismissTarget = 0
+        }
+      }
+
+      // 목표값으로 부드럽게 easing — 30fps 입력을 60fps 연속 움직임으로 변환
+      dismissY += (dismissTarget - dismissY) * DISMISS_EASE
+      if (dismissY < 0.5 && dismissTarget === 0) dismissY = 0
+
+      handState.dismissed = dismissed  // HandTracker 스켈레톤 하이라이트 동기화
+
+      scene.style.visibility = dismissY > H * 1.02 ? 'hidden' : 'visible'
+      scene.style.transform  = `translateY(${dismissY.toFixed(1)}px) scale(${zoomLevel.toFixed(3)})`
 
       offset += (target - offset) * EASE
 

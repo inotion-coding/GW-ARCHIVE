@@ -11,6 +11,10 @@ const handState = {
   back:        false,  // 더블탭 → 이전 페이지 트리거
   rotDx:       0,      // 손 회전: 오른손(+), 왼손(−) → 연속 스크롤 속도
   dragging:    false,  // 마우스/터치 드래그 중 (회전 제스처 차단용)
+  dismissDrag: 0,      // 양손 엄지+중지 수직 드래그 (양수=아래, 음수=위, 정규화 0~1)
+  dismissed:   false,  // 카드 섹션이 현재 화면 밖으로 사라진 상태 (Carousel이 기록)
+  fingerX:     -1,     // 검지 끝 X 좌표 (미러, 0~1) — -1 = 비활성 (검지 단독 모드일 때만 갱신)
+  fingerY:      0,     // 검지 끝 Y 좌표 (0~1)
   leftLocked:  true,   // 왼손 제스처 잠금 상태
   rightLocked: true,   // 오른손 제스처 잠금 상태
   leftLockProgress:  0,    // 잠금 제스처 게이지 진행률 0~1
