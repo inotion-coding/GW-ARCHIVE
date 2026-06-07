@@ -19,16 +19,16 @@
 
 | # | id | title | color | 이미지 설명 |
 |---|---|---|---|---|
-| 1 | 1 | Welcome | `#c8bfb0` | 환영/인사 테마 |
-| 2 | 2 | Schedule | `#9aab98` | 시계/일정 테마 |
-| 3 | 3 | Calendar | `#b8c0b8` | 달력/날짜 테마 |
-| 4 | 4 | Weather | `#d0d0d0` | 하늘/날씨 테마 |
-| 5 | 5 | Timer | `#b0c0c8` | 타이머/시간 테마 |
-| 6 | 6 | Placeholder 1 | `#c0b8c0` | 추상 패턴 |
-| 7 | 7 | Placeholder 2 | `#c8c0b0` | 추상 패턴 |
-| 8 | 8 | Placeholder 3 | `#b8b0b0` | 추상 패턴 |
-| 9 | 9 | Placeholder 4 | `#a8b8a8` | 추상 패턴 |
-| 10 | 10 | Placeholder 5 | `#c0c8b0` | 추상 패턴 |
+| 1 | 1 | Welcome | `#c8bfb0` | 청록빛 유기체 형태 (3D 추상) |
+| 2 | 2 | Schedule | `#9aab98` | 파스텔 나선 디스크 구조 (3D 추상) |
+| 3 | 3 | Calendar | `#b8c0b8` | 홀로그래픽 링/토러스 (3D 추상) |
+| 4 | 4 | Weather | `#d0d0d0` | 복숭아빛 유체 그라데이션 (3D 추상) |
+| 5 | 5 | Timer | `#b0c0c8` | 앰버 글로우 구체 (3D 추상) |
+| 6 | 6 | Placeholder 1 | `#c0b8c0` | 흰색 클레이 블롭 (3D 추상) |
+| 7 | 7 | Placeholder 2 | `#c8c0b0` | 흰색 물결 능선 조형 (3D 추상) |
+| 8 | 8 | Placeholder 3 | `#b8b0b0` | 라벤더·옐로 파스텔 구체 (3D 추상) |
+| 9 | 9 | Placeholder 4 | `#a8b8a8` | 흰 모래 물결 질감 (3D 추상) |
+| 10 | 10 | Placeholder 5 | `#c0c8b0` | 블랙 광택 조형물 (3D 추상) |
 
 ---
 
@@ -88,4 +88,4 @@
 
 ---
 
-**Last Updated**: 2026-06-07 (카드 제목 영문화 + 테마별 이미지 교체)
+**Last Updated**: 2026-06-07 (전체 카드 이미지 추상 CGI/3D 스타일 통일)
