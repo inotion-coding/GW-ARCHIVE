@@ -59,10 +59,14 @@ export default function Carousel() {
     let zoomLevel = 1
     let handVel = 0
     let wasHandPinching = false
-    let dismissY         = 0     // 씬 수직 오프셋 — easing으로 부드럽게 추적 (px)
-    let dismissTarget    = 0     // dismiss 목표값 — 드래그·물리 결정 (px)
-    let dismissed        = false // 완전히 화면 밖으로 사라진 상태
-    let dismissDragStartY = null // restore 드래그 시작 시점의 dismissTarget
+    let dismissY          = 0     // 씬 수직 오프셋 — easing으로 추적 (px)
+    let dismissTarget     = 0     // dismiss 목표값 — 드래그·물리 결정 (px)
+    let dismissX          = 0     // 씬 수평 오프셋 (px)
+    let dismissTargetX    = 0     // 수평 dismiss 목표값 (px)
+    let dismissed         = false // 완전히 화면 밖으로 사라진 상태
+    let dismissDir        = null  // 'down'|'up'|'left'|'right'|null — 사라진 방향
+    let dismissDragStartY = null  // restore 드래그 시작 시점의 dismissTarget (수직)
+    let dismissDragStartX = null  // restore 드래그 시작 시점의 dismissTargetX (수평)
 
     // 드래그 이동 거리 추적 — 짧으면 클릭으로 판정
     let dragStartX = 0
@@ -133,7 +137,8 @@ export default function Carousel() {
 
       // 카드가 화면 밖에 있을 때 일반 제스처 억제 (dismiss 드래그는 허용)
       const H = window.innerHeight
-      if (dismissed && dismissY > H * 0.6) {
+      const W = window.innerWidth
+      if (dismissed && (Math.abs(dismissY) > H * 0.6 || Math.abs(dismissX) > W * 0.6)) {
         handState.dx = 0; handState.snap = false
         handState.click = false; handState.zoomDelta = 0
       }
@@ -186,42 +191,117 @@ export default function Carousel() {
         handState.zoomDelta = 0
       }
 
-      // ── Dismiss / Restore ──
-      // dismissTarget: 드래그/물리가 결정하는 목표값 (30fps 업데이트)
-      // dismissY: dismissTarget을 easing으로 추적 (60fps → 부드러운 렌더링)
-      const DISMISS_THRESH = H * 0.30
-      const OFF_SCREEN_Y   = H + 80   // 화면 바로 아래
-      const DISMISS_EASE   = 0.12     // target 추적 속도
+      // ── Dismiss / Restore (상·하·좌·우 4방향) ──
+      // dismissDir: 'down'|'up'|'left'|'right'|null
+      const DISMISS_THRESH   = H * 0.30
+      const DISMISS_THRESH_X = W * 0.30
+      const OFF_SCREEN_Y     = H + 80
+      const OFF_SCREEN_X     = W + 80
+      const DISMISS_EASE     = 0.12
 
+      // ── 수직 dismiss (양손 엄지+중지 핀치) ──
+      // dismissActive=true : 제스처 유지 중 → 정지해도 현재 위치 보존 (중간 스톱)
+      // dismissActive=false: 제스처 해제 → 임계 미달 시 중앙 복귀, 초과 시 화면 밖 확정
       if (handState.dismissDrag !== 0) {
-        if (dismissDragStartY === null) dismissDragStartY = dismissTarget
-        dismissTarget = Math.max(0, dismissTarget + handState.dismissDrag * H * 3.0)
-        handState.dismissDrag = 0
-        // restore: 시작점 대비 THRESH 이상 위로 올렸을 때 확정 → target을 0으로
-        if (dismissed && dismissDragStartY - dismissTarget > DISMISS_THRESH) {
-          dismissed = false
-          dismissTarget = 0
+        const canActY = !dismissed || dismissDir === 'down' || dismissDir === 'up'
+        if (canActY) {
+          if (dismissDragStartY === null) dismissDragStartY = dismissTarget
+          const rawTarget = dismissTarget + handState.dismissDrag * H * 3.0
+          if (dismissed) {
+            dismissTarget = dismissDir === 'down'
+              ? Math.max(0, rawTarget)
+              : Math.min(0, rawTarget)
+          } else {
+            dismissTarget = rawTarget
+          }
+          if (dismissed) {
+            const travelBack = dismissDir === 'down'
+              ? dismissDragStartY - dismissTarget
+              : dismissTarget - dismissDragStartY
+            if (travelBack > DISMISS_THRESH) {
+              dismissed = false; dismissDir = null; dismissTarget = 0
+              dismissDragStartY = null
+            }
+          }
         }
+        handState.dismissDrag = 0
       } else {
         dismissDragStartY = null
-        if (dismissed) {
-          dismissTarget = OFF_SCREEN_Y
-        } else if (dismissTarget > DISMISS_THRESH) {
-          dismissed = true
-          dismissTarget = OFF_SCREEN_Y
-        } else {
-          dismissTarget = 0
+        if (dismissed && (dismissDir === 'down' || dismissDir === 'up')) {
+          if (!handState.dismissActive) {
+            // 제스처 해제 → 화면 밖으로 재고정
+            dismissTarget = dismissDir === 'down' ? OFF_SCREEN_Y : -OFF_SCREEN_Y
+          }
+          // dismissActive=true: 중간 스톱 — dismissTarget 유지
+        } else if (!dismissed) {
+          if (dismissTarget > DISMISS_THRESH) {
+            dismissed = true; dismissDir = 'down'; dismissTarget = OFF_SCREEN_Y
+          } else if (dismissTarget < -DISMISS_THRESH) {
+            dismissed = true; dismissDir = 'up'; dismissTarget = -OFF_SCREEN_Y
+          } else if (!handState.dismissActive) {
+            // 제스처 해제 + 임계 미달 → 중앙 복귀
+            dismissTarget = 0
+          }
+          // dismissActive=true + 임계 미달: 중간 스톱 — 위치 유지
         }
+        // dismissDir === 'left'|'right' 일 때 수직 target은 0 유지 (자동)
       }
 
-      // 목표값으로 부드럽게 easing — 30fps 입력을 60fps 연속 움직임으로 변환
-      dismissY += (dismissTarget - dismissY) * DISMISS_EASE
-      if (dismissY < 0.5 && dismissTarget === 0) dismissY = 0
+      // ── 수평 dismiss (단일 손 3핀치) ──
+      if (handState.dismissDragX !== 0) {
+        const canActX = !dismissed || dismissDir === 'right' || dismissDir === 'left'
+        if (canActX) {
+          if (dismissDragStartX === null) dismissDragStartX = dismissTargetX
+          const rawTargetX = dismissTargetX + handState.dismissDragX * W * 3.0
+          if (dismissed) {
+            dismissTargetX = dismissDir === 'right'
+              ? Math.max(0, rawTargetX)
+              : Math.min(0, rawTargetX)
+          } else {
+            dismissTargetX = rawTargetX
+          }
+          if (dismissed) {
+            const travelBackX = dismissDir === 'right'
+              ? dismissDragStartX - dismissTargetX
+              : dismissTargetX - dismissDragStartX
+            if (travelBackX > DISMISS_THRESH_X) {
+              dismissed = false; dismissDir = null; dismissTargetX = 0
+              dismissDragStartX = null
+            }
+          }
+        }
+        handState.dismissDragX = 0
+      } else {
+        dismissDragStartX = null
+        if (dismissed && (dismissDir === 'right' || dismissDir === 'left')) {
+          if (!handState.dismissDragXActive) {
+            dismissTargetX = dismissDir === 'right' ? OFF_SCREEN_X : -OFF_SCREEN_X
+          }
+          // dismissDragXActive=true: 중간 스톱 — dismissTargetX 유지
+        } else if (!dismissed) {
+          if (dismissTargetX > DISMISS_THRESH_X) {
+            dismissed = true; dismissDir = 'right'; dismissTargetX = OFF_SCREEN_X
+          } else if (dismissTargetX < -DISMISS_THRESH_X) {
+            dismissed = true; dismissDir = 'left'; dismissTargetX = -OFF_SCREEN_X
+          } else if (!handState.dismissDragXActive) {
+            dismissTargetX = 0
+          }
+          // dismissDragXActive=true + 임계 미달: 중간 스톱 — 위치 유지
+        }
+        // dismissDir === 'up'|'down' 일 때 수평 target은 0 유지 (자동)
+      }
 
-      handState.dismissed = dismissed  // HandTracker 스켈레톤 하이라이트 동기화
+      dismissY += (dismissTarget  - dismissY) * DISMISS_EASE
+      dismissX += (dismissTargetX - dismissX) * DISMISS_EASE
+      if (Math.abs(dismissY) < 0.5 && dismissTarget  === 0) dismissY = 0
+      if (Math.abs(dismissX) < 0.5 && dismissTargetX === 0) dismissX = 0
 
-      scene.style.visibility = dismissY > H * 1.02 ? 'hidden' : 'visible'
-      scene.style.transform  = `translateY(${dismissY.toFixed(1)}px) scale(${zoomLevel.toFixed(3)})`
+      handState.dismissed  = dismissed   // HandTracker 스켈레톤 하이라이트 동기화
+      handState.dismissDir = dismissDir  // HandTracker 수평 신호 게이팅용
+
+      const isOffScreen = Math.abs(dismissY) > H * 1.02 || Math.abs(dismissX) > W * 1.02
+      scene.style.visibility = isOffScreen ? 'hidden' : 'visible'
+      scene.style.transform  = `translateX(${dismissX.toFixed(1)}px) translateY(${dismissY.toFixed(1)}px) scale(${zoomLevel.toFixed(3)})`
 
       offset += (target - offset) * EASE
 

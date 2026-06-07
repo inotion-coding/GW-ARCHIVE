@@ -19,6 +19,13 @@
 | `clickX` / `clickY` | number | 클릭 시 검지 끝 좌표 (미러, 0~1) |
 | `back` | boolean | 더블탭 → 이전 페이지 트리거 |
 | `dragging` | boolean | 마우스/터치 드래그 중 (회전 제스처 차단용) |
+| `dismissDrag` | number | 양손 수직 드래그량 (양수=아래, 음수=위) |
+| `dismissDragX` | number | 단일 손 3핀치 수평 드래그량 (양수=오른쪽, 음수=왼쪽) |
+| `dismissed` | boolean | 카드 섹션이 화면 밖으로 사라진 상태 |
+| `dismissDir` | string\|null | 사라진 방향 `'down'`\|`'up'`\|`'left'`\|`'right'`\|null (HandTracker 게이팅용) |
+| `dismissActive` | boolean | 수직 dismiss 제스처 유지 중 — true일 때 Carousel이 중간 위치 보존 |
+| `dismissDragXActive` | boolean | 수평 dismiss 제스처 유지 중 — true일 때 Carousel이 중간 위치 보존 |
+| `fingerX` / `fingerY` | number | 검지 끝 좌표 (미러, 0~1) — -1 = 비활성 |
 | `leftLocked` / `rightLocked` | boolean | 손별 잠금 상태 (기본값: true) |
 | `leftLockProgress` / `rightLockProgress` | number | 잠금 게이지 진행률 0~1 |
 | `leftLockFlash` / `rightLockFlash` | `'lock'`\|`'unlock'`\|null | 토글 시 UI 플래시 신호 |
@@ -33,6 +40,7 @@
 | `SCROLL_HYSTERESIS` | 1.30 | 핀치 유지 임계 배율 (유지 시 0.33 × 1.3 = 0.43 적용) |
 | `ZOOM_RATIO` | 0.20 | 엄지+검지 양손 줌 핀치 임계 비율 |
 | `BACK_RATIO` | 0.25 | 엄지+검지 뒤로가기 핀치 임계 비율 |
+| `TRI_PINCH_RATIO` | 0.28 | 엄지+검지+중지 3핀치 임계 비율 (좌우 dismiss) |
 | `HAND_SENS` | 20 | 핀치 이동 감도 |
 | `DX_DEAD_ZONE` | 0.004 | 핀치 이동 데드존 |
 | `ZOOM_SENS` | 2.2 | 줌 감도 |
@@ -77,7 +85,17 @@
 - **Carousel**: `elementFromPoint`로 hit-test → 해당 카드 상세 페이지 이동
 - **재발동 방지**: 검지가 위로 올라가야 (`dy < -0.01`) 다시 탭 가능
 
-### 5. 손 Roll 회전 → 연속 스크롤
+### 5. 단일 손 엄지+검지+중지 3핀치 → 좌우 dismiss
+- **감지**: 엄지(4)↔검지(8) AND 엄지(4)↔중지(12) 모두 3D 거리 / 손 크기 < `TRI_PINCH_RATIO(0.28)`
+- **방향 규칙**:
+  - 사용자 **오른손** (MediaPipe `'Left'`) → 오른쪽으로 밀어 dismiss
+  - 사용자 **왼손** (MediaPipe `'Right'`) → 왼쪽으로 밀어 dismiss
+- **신호 게이팅**: dismiss 중 → 오른손은 dx > 0 또는 복귀 방향, 왼손은 dx < 0 또는 복귀 방향
+- **복귀**: dismiss된 방향의 반대로 `W * 0.30` 이상 이동 시 복귀 확정
+- **우선순위**: 줌·스크롤·검지 모드보다 높음 (triPinch 감지 시 타 제스처 차단)
+- **참조**: `handState.dismissDragX` → `Carousel.jsx` 수평 dismiss 물리
+
+### 6. 손 Roll 회전 → 연속 스크롤
 - **감지**: 검지MCP(5) → 소지MCP(17) 벡터 기울기 누적 변화량 > `ROT_FIRE_ANGLE(75°)`
 - **방향**: 오른손(MediaPipe 'Left') 회전 → `rotDx = +ROT_IMPULSE(0.45)` / 왼손 → `−0.45`
 - **조건**: 손바닥이 카메라를 향한 상태(`isPalmFacing`)에서 시작한 회전만 허용
@@ -131,12 +149,15 @@ detect(ts) 매 프레임 (30fps 캡)
 ├── lms.length === 0 → 전체 상태 초기화 (snap 트리거 포함)
 ├── 잠금된 손 분리 → gestureLms (잠금해제 손만)
 ├── 회전 감지 (스크롤·드래그 없을 때)
-├── bothZoomPinch?
-│   ├── YES → 줌 모드 (zoomDelta 계산)
+├── anyTriPinch? (단일 손 엄지+검지+중지 3핀치)
+│   ├── YES → 좌우 dismiss 모드 (dismissDragX 계산, 타 제스처 차단)
 │   └── NO
-│       ├── inIndexMode? (검지 단독)
-│       │   ├── YES → 탭 클릭 감지
-│       │   └── NO → 스크롤 핀치 감지 (dx 계산)
+│       ├── bothZoomPinch?
+│       │   ├── YES → 줌 모드 (zoomDelta 계산)
+│       │   └── NO
+│       │       ├── bothScrollPinch? → 수직 dismiss 모드 (dismissDrag 계산)
+│       │       ├── inIndexMode? → 탭 클릭 감지
+│       │       └── 스크롤 핀치 감지 (dx 계산)
 │       └── 더블탭 → back 트리거
 └── 잠금 제스처 감지 (모든 손 대상, 잠금 여부 무관)
     └── 손 미감지 시 게이지 초기화 루프
@@ -144,4 +165,4 @@ detect(ts) 매 프레임 (30fps 캡)
 
 ---
 
-**Last Updated**: 2026-06-07 (핀치 3D 거리 + 히스테리시스 + isHandBack 적용)
+**Last Updated**: 2026-06-07 (좌우 dismiss 양손 양방향 + dismissActive 중간 스톱 추가)

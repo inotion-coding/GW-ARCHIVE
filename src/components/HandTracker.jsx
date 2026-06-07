@@ -27,6 +27,7 @@ const FIST_HOLD_FRAMES  = 15    // 주먹 유지 필요 프레임 (~0.5초 at 30
 const INACTIVITY_FRAMES = 1800  // 자동 잠금 비활성 프레임 (~60초 at 30fps)
 const FLASH_FRAMES      = 45    // 색상 플래시 지속 프레임 (~1.5초)
 const BACK_ZONE_COS     = Math.cos(20 * Math.PI / 180)  // 손등 기준 ±20° 차단 (cos20° ≈ 0.940)
+const TRI_PINCH_RATIO   = 0.28   // 엄지+검지+중지 3핀치 임계 비율
 
 // 회전 감지 파라미터
 const ROT_IMPULSE  = 0.45   // 발동 시 임펄스 속도 (FRIC=0.92 기준 약 5.6 카드 이동)
@@ -59,6 +60,15 @@ function isFistClosed(lm) {
   return [8, 12, 16, 20].every(i =>
     Math.hypot(lm[i].x - cx, lm[i].y - cy) / hs < 0.7
   )
+}
+
+// 엄지(4)+검지(8)+중지(12) 3핀치 — 세 거리가 모두 handSize 대비 ratio 미만일 때 활성
+function analyzeTriPinch(lm, ratio) {
+  const handSize = Math.hypot(lm[0].x - lm[9].x, lm[0].y - lm[9].y, (lm[0].z ?? 0) - (lm[9].z ?? 0))
+  if (handSize < 0.01) return false
+  const d48  = Math.hypot(lm[4].x - lm[8].x,  lm[4].y - lm[8].y,  (lm[4].z ?? 0) - (lm[8].z  ?? 0))
+  const d412 = Math.hypot(lm[4].x - lm[12].x, lm[4].y - lm[12].y, (lm[4].z ?? 0) - (lm[12].z ?? 0))
+  return (d48 / handSize) < ratio && (d412 / handSize) < ratio
 }
 
 // 통합 핀치 분석: tipA·tipB 두 랜드마크 간 거리 비율 측정 (3D 거리로 각도 안정성 확보)
@@ -211,6 +221,7 @@ export default function HandTracker() {
     let wasBackPinching      = false
     let lastScrollMidY       = null   // 양손 수직 드래그 추적용
     let wasBothScrollPinching = false // 양손 핀치 히스테리시스용
+    let lastTriPinchX = { Left: null, Right: null } // 3핀치 손목 X 추적 (수평 드래그용)
 
     // 손별 roll 각도 추적 (Left / Right)
     const rollState = {
@@ -244,11 +255,13 @@ export default function HandTracker() {
     }
 
     function resetHandState() {
-      handState.active      = false
-      handState.activePinch = false
-      handState.dx          = 0
-      handState.zoomDelta   = 0
-      handState.rotDx       = 0
+      handState.active            = false
+      handState.activePinch       = false
+      handState.dx                = 0
+      handState.zoomDelta         = 0
+      handState.rotDx             = 0
+      handState.dismissActive     = false
+      handState.dismissDragXActive = false
     }
 
     function detect(ts) {
@@ -275,6 +288,7 @@ export default function HandTracker() {
         if (wasPinching) { handState.snap = true; wasPinching = false }
         lastX = null; lastZoomDist = null; lastIndexY = null; tapFired = false; lastScrollMidY = null
         doubleTapCount = 0; wasBackPinching = false; wasBothScrollPinching = false
+        lastTriPinchX.Left = null; lastTriPinchX.Right = null
         rollState.Left.lastAngle  = null; rollState.Left.cumAngle  = 0; rollState.Left.startPalmFacing  = null
         rollState.Right.lastAngle = null; rollState.Right.cumAngle = 0; rollState.Right.startPalmFacing = null
         for (const s of ['Left', 'Right']) {
@@ -338,6 +352,19 @@ export default function HandTracker() {
       })
 
       const firstLmFist = gestureLms.find((_, i) => !backZoneMask[i]) ?? null
+
+      // ── 3핀치 (엄지+검지+중지) 감지 — 손별로 분류 ──
+      // 양손 수직 dismiss(bothScrollPinch) 중에는 triPinch 차단 (수직 제스처 간섭 방지)
+      const activePinchCountPre = scrollInfos.filter(s => s.activePinch).length
+      const triPinchHands = {}  // { 'Left': {lm, idx}, 'Right': {lm, idx} }
+      for (let i = 0; i < gestureLms.length; i++) {
+        if (backZoneMask[i]) continue
+        const side = gestureHandedness[i]?.[0]?.categoryName
+        if (side) triPinchHands[side] = { lm: gestureLms[i], idx: i }
+      }
+      const rightTriPinch = activePinchCountPre < 2 && !!triPinchHands['Left']  && analyzeTriPinch(triPinchHands['Left'].lm,  TRI_PINCH_RATIO)
+      const leftTriPinch  = activePinchCountPre < 2 && !!triPinchHands['Right'] && analyzeTriPinch(triPinchHands['Right'].lm, TRI_PINCH_RATIO)
+      const anyTriPinch   = rightTriPinch || leftTriPinch
 
       // ── 손 회전 감지 ──
       const anyScrollPinch = scrollInfos.some(s => s.activePinch)
@@ -423,8 +450,62 @@ export default function HandTracker() {
         }
       }
 
+      // ── 단일 손 엄지+검지+중지 3핀치 → 좌우 dismiss ──
+      if (anyTriPinch) {
+        if (wasPinching) { handState.snap = true; wasPinching = false }
+        lastZoomDist = null; lastScrollMidY = null; lastIndexY = null; tapFired = false
+        handState.activePinch = false; handState.dx = 0; handState.fingerX = -1
+        handState.zoomDelta = 0; wasZoomPinching = false; wasBothScrollPinching = false
+        handState.dismissDragXActive = true
+        handState.dismissActive      = false
+
+        // 오른손(MediaPipe 'Left') — 좌·우 양방향 허용
+        if (rightTriPinch) {
+          const lm = triPinchHands['Left'].lm
+          const mx = 1 - lm[0].x  // 미러 보정 손목 X
+          if (lastTriPinchX.Left !== null) {
+            const dx = mx - lastTriPinchX.Left
+            if (Math.abs(dx) > DX_DEAD_ZONE) {
+              const dirOk = !handState.dismissed
+                || (handState.dismissDir === 'right' && dx < 0)
+                || (handState.dismissDir === 'left'  && dx > 0)
+              if (dirOk) handState.dismissDragX = dx
+            }
+          }
+          lastTriPinchX.Left = mx
+          drawHand(lm, ctx, W, H, true, isDark, null)
+          drawPinchDot(lm, 4, 8,  ctx, W, H, isDark)
+          drawPinchDot(lm, 4, 12, ctx, W, H, isDark)
+        } else {
+          lastTriPinchX.Left = null
+        }
+
+        // 왼손(MediaPipe 'Right') — 좌·우 양방향 허용
+        if (leftTriPinch) {
+          const lm = triPinchHands['Right'].lm
+          const mx = 1 - lm[0].x
+          if (lastTriPinchX.Right !== null) {
+            const dx = mx - lastTriPinchX.Right
+            if (Math.abs(dx) > DX_DEAD_ZONE) {
+              const dirOk = !handState.dismissed
+                || (handState.dismissDir === 'right' && dx < 0)
+                || (handState.dismissDir === 'left'  && dx > 0)
+              if (dirOk) handState.dismissDragX = dx
+            }
+          }
+          lastTriPinchX.Right = mx
+          drawHand(lm, ctx, W, H, true, isDark, null)
+          drawPinchDot(lm, 4, 8,  ctx, W, H, isDark)
+          drawPinchDot(lm, 4, 12, ctx, W, H, isDark)
+        } else {
+          lastTriPinchX.Right = null
+        }
+
       // ── 양손 엄지+검지 핀치 → 줌 모드 ──
-      if (bothZoomPinch) {
+      } else if (bothZoomPinch) {
+        lastTriPinchX.Left = null; lastTriPinchX.Right = null
+        handState.dismissDragXActive = false
+        handState.dismissActive      = false
         gestureLms.forEach((lm, i) => drawHand(lm, ctx, W, H, true, isDark, null))
         const p0 = drawPinchDot(gestureLms[0], 4, 8, ctx, W, H, isDark)
         const p1 = drawPinchDot(gestureLms[1], 4, 8, ctx, W, H, isDark)
@@ -447,6 +528,7 @@ export default function HandTracker() {
         handState.dx = 0; handState.activePinch = false; handState.fingerX = -1
 
       } else {
+        lastTriPinchX.Left = null; lastTriPinchX.Right = null
         lastZoomDist        = null
         handState.zoomDelta = 0
         wasZoomPinching     = false
@@ -468,7 +550,9 @@ export default function HandTracker() {
           lastIndexY = null; tapFired = false; lastX = null
           if (wasPinching) { handState.snap = true; wasPinching = false }
           wasBothScrollPinching = true
-          handState.activePinch = false; handState.dx = 0; handState.fingerX = -1
+          handState.activePinch       = false; handState.dx = 0; handState.fingerX = -1
+          handState.dismissActive      = showActive  // 유효 위치이거나 이미 dismissed → 제스처 유지 신호
+          handState.dismissDragXActive = false
 
           gestureLms.forEach((lm, i) => drawHand(lm, ctx, W, H, showActive, isDark, null))
           const pinchPts = []
@@ -488,8 +572,8 @@ export default function HandTracker() {
           if (lastScrollMidY !== null) {
             const dy = avgMidY - lastScrollMidY
             if (Math.abs(dy) > DX_DEAD_ZONE) {
-              // 상향(restore)은 제약 없이 항상 전달, 하향(dismiss)은 위치 제약 필요
-              if (dy < 0 || dismissValid) handState.dismissDrag = dy
+              // 유효 위치(dismiss 시작) 또는 이미 dismissed(restore) 상태일 때 양방향 전달
+              if (dismissValid || handState.dismissed) handState.dismissDrag = dy
             }
           }
           lastScrollMidY = avgMidY
@@ -497,6 +581,8 @@ export default function HandTracker() {
         } else {
           lastScrollMidY = null
           wasBothScrollPinching = false
+          handState.dismissActive      = false
+          handState.dismissDragXActive = false
 
           // ── 검지 단독 → 탭 클릭 ──
           const inIndexMode = firstLmFist && scrollActive < 0 && isIndexOnly(firstLmFist) && handState.rotDx === 0
