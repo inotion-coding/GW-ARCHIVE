@@ -18,8 +18,8 @@ const SCROLL_RATIO      = 0.33
 const SCROLL_HYSTERESIS = 1.30  // 핀치 유지 임계값 배율 (0.33 → 0.43)
 const ZOOM_RATIO    = 0.20
 const BACK_RATIO    = 0.25   // 뒤로가기 더블탭
-const HAND_SENS     = 20
-const DX_DEAD_ZONE  = 0.004
+const HAND_SENS     = 26
+const DX_DEAD_ZONE  = 0.002
 const ZOOM_SENS     = 2.2
 const TAP_THRESHOLD = 0.04
 const DB_TAP_WINDOW   = 9     // 더블탭 인식 시간 창 (프레임, ~0.3초 at 30fps)
@@ -260,7 +260,7 @@ export default function HandTracker() {
       handState.dx                = 0
       handState.zoomDelta         = 0
       handState.rotDx             = 0
-      handState.dismissActive     = false
+      handState.dismissActive      = false
       handState.dismissDragXActive = false
     }
 

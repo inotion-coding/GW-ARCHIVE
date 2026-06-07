@@ -14,9 +14,11 @@ export default function Header() {
     <header>
       <span>GW Archive</span>
       <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-        <span>Issue 01 / Curated Selection</span>
         <button className="theme-toggle" onClick={() => setDark(d => !d)}>
           {dark ? 'Light' : 'Dark'}
+        </button>
+        <button className="theme-toggle">
+          Settings
         </button>
       </div>
     </header>

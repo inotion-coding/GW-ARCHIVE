@@ -1,0 +1,185 @@
+.calendar-view {
+  position: fixed;
+  inset: 0;
+  z-index: 1;          /* carousel(z-index:2) 아래 */
+  display: flex;
+  align-items: stretch;
+  padding: 80px 52px 44px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+.calendar-view--visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ── 달력 패널 (좌 2/3) ── */
+.cal-panel {
+  flex: 0 0 66.67%;
+  display: flex;
+  flex-direction: column;
+  padding-right: 52px;
+  border-right: 1px solid var(--border);
+  min-height: 0;
+}
+
+.cal-header {
+  margin-bottom: 28px;
+}
+
+.cal-month-label {
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text);
+  opacity: 0.5;
+}
+
+.cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 6px;
+}
+
+.cal-weekday {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 4px 0 8px;
+  opacity: 0.55;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-auto-rows: 1fr;
+  flex: 1;
+  gap: 2px;
+  min-height: 0;
+}
+
+/* ── 날짜 셀 ── */
+.cal-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: border-color 0.14s, background 0.14s;
+}
+
+.cal-cell--empty {
+  cursor: default;
+}
+
+.cal-cell:not(.cal-cell--empty):hover {
+  border-color: var(--border);
+}
+
+.cal-cell--today {
+  border-color: var(--text) !important;
+}
+
+.cal-cell--selected {
+  background: rgba(128, 128, 128, 0.12);
+  border-color: var(--text) !important;
+}
+
+.cal-day-num {
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  opacity: 0.78;
+}
+
+/* 이벤트 있는 날 표시 점 */
+.cal-dot {
+  position: absolute;
+  bottom: 6px;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--text);
+  opacity: 0.45;
+}
+
+/* ── 일정 패널 (우 1/3) ── */
+.schedule-panel {
+  flex: 0 0 33.33%;
+  display: flex;
+  flex-direction: column;
+  padding-left: 52px;
+}
+
+.schedule-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 32px;
+}
+
+.schedule-weekday {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.schedule-date-num {
+  font-size: 56px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  opacity: 0.82;
+}
+
+.schedule-events {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+}
+
+.schedule-event {
+  display: flex;
+  gap: 24px;
+  align-items: baseline;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+  opacity: 0.72;
+  transition: opacity 0.12s;
+}
+
+.schedule-event:hover {
+  opacity: 1;
+}
+
+.schedule-time {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  width: 42px;
+}
+
+.schedule-title {
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  color: var(--text);
+  flex: 1;
+}
+
+.schedule-empty {
+  padding: 20px 0;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 0.4;
+}

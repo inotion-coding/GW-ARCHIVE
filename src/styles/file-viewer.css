@@ -1,0 +1,403 @@
+/* ── FileViewer 오버레이 컨테이너 ── */
+.file-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+.file-viewer--visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ── 사이드바 (좌 25%) ── */
+.fv-sidebar {
+  flex: 0 0 25%;
+  display: flex;
+  flex-direction: column;
+  padding: 80px 24px 44px;
+  border-right: 1px solid var(--border);
+  gap: 16px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* ── 드롭존 ── */
+.fv-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 20px 12px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: border-color 0.14s, background 0.14s;
+  flex-shrink: 0;
+}
+
+.fv-dropzone:hover,
+.fv-dropzone--over {
+  border-color: var(--text);
+  background: rgba(128, 128, 128, 0.06);
+}
+
+.fv-drop-arrow {
+  font-size: 16px;
+  opacity: 0.45;
+  color: var(--text);
+}
+
+.fv-hint {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text);
+  opacity: 0.55;
+}
+
+.fv-types {
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  opacity: 0.38;
+  text-align: center;
+  line-height: 1.7;
+  margin-top: 2px;
+}
+
+/* ── 파일 목록 ── */
+.fv-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.fv-file-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: border-color 0.12s, background 0.12s;
+}
+
+.fv-file-item:hover { border-color: var(--border); }
+
+.fv-file-item--active {
+  background: rgba(128, 128, 128, 0.10);
+  border-color: var(--text) !important;
+}
+
+.fv-file-tag {
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  opacity: 0.5;
+  flex-shrink: 0;
+  width: 32px;
+}
+
+.fv-file-name {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  opacity: 0.72;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fv-file-remove {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  opacity: 0;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: opacity 0.12s;
+}
+
+.fv-file-item:hover .fv-file-remove { opacity: 0.4; }
+.fv-file-remove:hover { opacity: 1 !important; }
+
+/* ── 메인 영역 (우 75%) ── */
+.fv-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 80px 48px 44px;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* 빈 상태 */
+.fv-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 10px;
+  opacity: 0.35;
+}
+
+.fv-empty-icon  { font-size: 32px; color: var(--text); line-height: 1; }
+.fv-empty-label { font-size: 13px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text); }
+.fv-empty-sub   { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); }
+
+/* ── 파일 헤더 ── */
+.fv-content-header {
+  display: flex;
+  align-items: center;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+  flex-shrink: 0;
+}
+
+.fv-content-name {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text);
+  opacity: 0.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── 콘텐츠 본문 영역 ── */
+.fv-content-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── HTML 렌더링 (md, docx, hwpx, odt 등) ── */
+.fv-rendered {
+  flex: 1;
+  overflow-y: auto;
+  color: var(--text);
+  line-height: 1.75;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+/* Markdown */
+.fv-rendered--md h1 { font-size: 20px; letter-spacing: 0.06em; margin: 1.4em 0 0.5em; opacity: 0.88; }
+.fv-rendered--md h2 { font-size: 16px; letter-spacing: 0.06em; margin: 1.2em 0 0.4em; opacity: 0.85; }
+.fv-rendered--md h3 { font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; margin: 1em 0 0.4em; opacity: 0.8; }
+.fv-rendered--md p  { margin: 0.5em 0; opacity: 0.78; }
+.fv-rendered--md ul, .fv-rendered--md ol { padding-left: 1.6em; opacity: 0.78; }
+.fv-rendered--md li { margin: 0.25em 0; }
+.fv-rendered--md a  { color: inherit; opacity: 0.65; }
+.fv-rendered--md strong, .fv-rendered--md b { opacity: 0.92; }
+.fv-rendered--md blockquote {
+  border-left: 2px solid var(--border);
+  padding-left: 14px;
+  opacity: 0.6;
+  margin: 0.8em 0;
+}
+.fv-rendered--md code {
+  background: rgba(128,128,128,0.1);
+  padding: 1px 5px;
+  font-family: inherit;
+  font-size: 11.5px;
+}
+.fv-rendered--md pre {
+  background: rgba(128,128,128,0.08);
+  padding: 12px 16px;
+  overflow-x: auto;
+  border-left: 2px solid var(--border);
+  margin: 0.8em 0;
+}
+.fv-rendered--md pre code { background: none; padding: 0; }
+.fv-rendered--md hr { border: none; border-top: 1px solid var(--border); margin: 1.5em 0; }
+.fv-rendered--md table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.fv-rendered--md td, .fv-rendered--md th { border: 1px solid var(--border); padding: 6px 10px; }
+
+/* DOCX / ODT */
+.fv-rendered--docx p,
+.fv-rendered--odt  p { margin: 0.5em 0; opacity: 0.8; }
+.fv-rendered--docx table,
+.fv-rendered--odt  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.fv-rendered--docx td,
+.fv-rendered--docx th,
+.fv-rendered--odt  td,
+.fv-rendered--odt  th { border: 1px solid var(--border); padding: 6px 10px; }
+
+/* XLSX / ODS / CSV */
+.fv-rendered--xlsx table,
+.fv-rendered--xls  table,
+.fv-rendered--ods  table,
+.fv-rendered--csv  table {
+  border-collapse: collapse;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.fv-rendered--xlsx td,
+.fv-rendered--xls  td,
+.fv-rendered--ods  td,
+.fv-rendered--csv  td,
+.fv-rendered--xlsx th,
+.fv-rendered--xls  th {
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  opacity: 0.8;
+}
+
+.fv-sheet-label {
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 0.48;
+  margin: 18px 0 6px;
+}
+.fv-sheet-sep { height: 24px; }
+
+/* PPTX / ODP 슬라이드 */
+.fv-slide {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border);
+}
+.fv-slide:last-child { border-bottom: none; }
+.fv-slide-num {
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 0.4;
+  margin-bottom: 8px;
+}
+.fv-slide p { margin: 0.35em 0; opacity: 0.8; }
+
+/* HWPX */
+.fv-rendered--hwpx p { margin: 0.4em 0; opacity: 0.8; }
+
+/* EPUB */
+.fv-epub-chapter { margin-bottom: 8px; }
+.fv-epub-chapter p { margin: 0.4em 0; opacity: 0.78; }
+
+/* 코드 (highlight.js) */
+.fv-code {
+  margin: 0;
+  border-radius: 0;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+.fv-code code.hljs {
+  font-family: 'Courier Prime', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.65;
+  padding: 20px 24px;
+  display: block;
+}
+
+/* 플레인 텍스트 */
+.fv-plain {
+  margin: 0;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text);
+  opacity: 0.78;
+}
+
+/* ── 미디어 타입 ── */
+.fv-media-center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.fv-media-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.fv-media-video {
+  max-width: 100%;
+  max-height: 100%;
+  outline: none;
+}
+
+.fv-audio-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 24px;
+}
+
+.fv-audio-name {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text);
+  opacity: 0.55;
+}
+
+.fv-media-audio {
+  width: 100%;
+  max-width: 480px;
+}
+
+.fv-media-pdf {
+  flex: 1;
+  width: 100%;
+  border: none;
+  display: block;
+  min-height: 0;
+}
+
+/* 오류 / 안내 */
+.fv-empty-msg {
+  color: var(--text);
+  opacity: 0.38;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+}
+.fv-err {
+  color: var(--text);
+  opacity: 0.65;
+  border-left: 2px solid var(--border);
+  padding-left: 14px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+/* ── 스크롤바 ── */
+.fv-rendered::-webkit-scrollbar,
+.fv-code::-webkit-scrollbar,
+.fv-file-list::-webkit-scrollbar { width: 3px; }
+.fv-rendered::-webkit-scrollbar-track,
+.fv-code::-webkit-scrollbar-track,
+.fv-file-list::-webkit-scrollbar-track { background: transparent; }
+.fv-rendered::-webkit-scrollbar-thumb,
+.fv-code::-webkit-scrollbar-thumb,
+.fv-file-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }

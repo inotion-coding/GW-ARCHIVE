@@ -8,7 +8,7 @@ const N     = CARDS.length
 const SLOTS = 11
 const HALF  = 5
 
-const EASE   = 0.08
+const EASE   = 0.10
 const FRIC   = 0.92
 const SENS   = 0.005
 
@@ -65,8 +65,8 @@ export default function Carousel() {
     let dismissTargetX    = 0     // 수평 dismiss 목표값 (px)
     let dismissed         = false // 완전히 화면 밖으로 사라진 상태
     let dismissDir        = null  // 'down'|'up'|'left'|'right'|null — 사라진 방향
-    let dismissDragStartY = null  // restore 드래그 시작 시점의 dismissTarget (수직)
-    let dismissDragStartX = null  // restore 드래그 시작 시점의 dismissTargetX (수평)
+    let dismissDragStartY = null
+    let dismissDragStartX = null
 
     // 드래그 이동 거리 추적 — 짧으면 클릭으로 판정
     let dragStartX = 0
@@ -149,19 +149,24 @@ export default function Carousel() {
         }
         wasHandPinching = handState.activePinch
 
-        if (handState.rotDx !== 0) {
-          // 회전 임펄스: onUp과 동일하게 관성 투영 후 스냅 목표 설정
-          const impulse   = handState.rotDx
-          target          = Math.round(offset + impulse / (1 - FRIC))
-          handVel         = impulse
+        if (!dismissed) {
+          if (handState.rotDx !== 0) {
+            // 회전 임펄스: 카드가 보일 때만 적용
+            const impulse   = handState.rotDx
+            target          = Math.round(offset + impulse / (1 - FRIC))
+            handVel         = impulse
+            handState.rotDx = 0
+          } else if (handState.dx !== 0) {
+            target      += handState.dx
+            handState.dx = 0
+          }
+        } else {
           handState.rotDx = 0
-        } else if (handState.dx !== 0) {
-          target      += handState.dx
-          handState.dx = 0
+          handState.dx    = 0
         }
+
         if (handState.snap) {
-          // 관성 없이 현재 위치에서 가장 가까운 카드로 즉시 스냅
-          target         = Math.round(offset)
+          target         = Math.round(target)
           handVel        = 0
           handState.snap = false
         }
@@ -192,21 +197,24 @@ export default function Carousel() {
       }
 
       // ── Dismiss / Restore (상·하·좌·우 4방향) ──
-      // dismissDir: 'down'|'up'|'left'|'right'|null
       const DISMISS_THRESH   = H * 0.30
       const DISMISS_THRESH_X = W * 0.30
+      const RESTORE_THRESH   = H * 0.08
+      const RESTORE_THRESH_X = W * 0.08
       const OFF_SCREEN_Y     = H + 80
       const OFF_SCREEN_X     = W + 80
-      const DISMISS_EASE     = 0.12
+      const THROW_EASE       = 0.10
+      const DRAG_EASE        = 0.30
 
-      // ── 수직 dismiss (양손 엄지+중지 핀치) ──
-      // dismissActive=true : 제스처 유지 중 → 정지해도 현재 위치 보존 (중간 스톱)
-      // dismissActive=false: 제스처 해제 → 임계 미달 시 중앙 복귀, 초과 시 화면 밖 확정
+      const hadYDrag = handState.dismissDrag  !== 0
+      const hadXDrag = handState.dismissDragX !== 0
+
+      // ── 수직 dismiss ──
       if (handState.dismissDrag !== 0) {
         const canActY = !dismissed || dismissDir === 'down' || dismissDir === 'up'
         if (canActY) {
           if (dismissDragStartY === null) dismissDragStartY = dismissTarget
-          const rawTarget = dismissTarget + handState.dismissDrag * H * 3.0
+          const rawTarget = dismissTarget + handState.dismissDrag * H * 2.0
           if (dismissed) {
             dismissTarget = dismissDir === 'down'
               ? Math.max(0, rawTarget)
@@ -218,7 +226,7 @@ export default function Carousel() {
             const travelBack = dismissDir === 'down'
               ? dismissDragStartY - dismissTarget
               : dismissTarget - dismissDragStartY
-            if (travelBack > DISMISS_THRESH) {
+            if (travelBack > RESTORE_THRESH) {
               dismissed = false; dismissDir = null; dismissTarget = 0
               dismissDragStartY = null
             }
@@ -226,33 +234,30 @@ export default function Carousel() {
         }
         handState.dismissDrag = 0
       } else {
-        dismissDragStartY = null
+        if (!handState.dismissActive) dismissDragStartY = null
         if (dismissed && (dismissDir === 'down' || dismissDir === 'up')) {
           if (!handState.dismissActive) {
-            // 제스처 해제 → 화면 밖으로 재고정
             dismissTarget = dismissDir === 'down' ? OFF_SCREEN_Y : -OFF_SCREEN_Y
           }
-          // dismissActive=true: 중간 스톱 — dismissTarget 유지
         } else if (!dismissed) {
           if (dismissTarget > DISMISS_THRESH) {
-            dismissed = true; dismissDir = 'down'; dismissTarget = OFF_SCREEN_Y
+            dismissed = true; dismissDir = 'down'
+            dismissTarget = OFF_SCREEN_Y
           } else if (dismissTarget < -DISMISS_THRESH) {
-            dismissed = true; dismissDir = 'up'; dismissTarget = -OFF_SCREEN_Y
+            dismissed = true; dismissDir = 'up'
+            dismissTarget = -OFF_SCREEN_Y
           } else if (!handState.dismissActive) {
-            // 제스처 해제 + 임계 미달 → 중앙 복귀
             dismissTarget = 0
           }
-          // dismissActive=true + 임계 미달: 중간 스톱 — 위치 유지
         }
-        // dismissDir === 'left'|'right' 일 때 수직 target은 0 유지 (자동)
       }
 
-      // ── 수평 dismiss (단일 손 3핀치) ──
+      // ── 수평 dismiss ──
       if (handState.dismissDragX !== 0) {
         const canActX = !dismissed || dismissDir === 'right' || dismissDir === 'left'
         if (canActX) {
           if (dismissDragStartX === null) dismissDragStartX = dismissTargetX
-          const rawTargetX = dismissTargetX + handState.dismissDragX * W * 3.0
+          const rawTargetX = dismissTargetX + handState.dismissDragX * W * 2.0
           if (dismissed) {
             dismissTargetX = dismissDir === 'right'
               ? Math.max(0, rawTargetX)
@@ -264,7 +269,7 @@ export default function Carousel() {
             const travelBackX = dismissDir === 'right'
               ? dismissDragStartX - dismissTargetX
               : dismissTargetX - dismissDragStartX
-            if (travelBackX > DISMISS_THRESH_X) {
+            if (travelBackX > RESTORE_THRESH_X) {
               dismissed = false; dismissDir = null; dismissTargetX = 0
               dismissDragStartX = null
             }
@@ -272,32 +277,36 @@ export default function Carousel() {
         }
         handState.dismissDragX = 0
       } else {
-        dismissDragStartX = null
+        if (!handState.dismissDragXActive) dismissDragStartX = null
         if (dismissed && (dismissDir === 'right' || dismissDir === 'left')) {
           if (!handState.dismissDragXActive) {
             dismissTargetX = dismissDir === 'right' ? OFF_SCREEN_X : -OFF_SCREEN_X
           }
-          // dismissDragXActive=true: 중간 스톱 — dismissTargetX 유지
         } else if (!dismissed) {
           if (dismissTargetX > DISMISS_THRESH_X) {
-            dismissed = true; dismissDir = 'right'; dismissTargetX = OFF_SCREEN_X
+            dismissed = true; dismissDir = 'right'
+            dismissTargetX = OFF_SCREEN_X
           } else if (dismissTargetX < -DISMISS_THRESH_X) {
-            dismissed = true; dismissDir = 'left'; dismissTargetX = -OFF_SCREEN_X
+            dismissed = true; dismissDir = 'left'
+            dismissTargetX = -OFF_SCREEN_X
           } else if (!handState.dismissDragXActive) {
             dismissTargetX = 0
           }
-          // dismissDragXActive=true + 임계 미달: 중간 스톱 — 위치 유지
         }
-        // dismissDir === 'up'|'down' 일 때 수평 target은 0 유지 (자동)
       }
 
-      dismissY += (dismissTarget  - dismissY) * DISMISS_EASE
-      dismissX += (dismissTargetX - dismissX) * DISMISS_EASE
-      if (Math.abs(dismissY) < 0.5 && dismissTarget  === 0) dismissY = 0
-      if (Math.abs(dismissX) < 0.5 && dismissTargetX === 0) dismissX = 0
+      // ── Easing: 드래그 중 빠른 추적(DRAG_EASE), 던지기·복귀 부드러운 감쇠(THROW_EASE) ──
+      const yEase = hadYDrag ? DRAG_EASE : THROW_EASE
+      const xEase = hadXDrag ? DRAG_EASE : THROW_EASE
+      dismissY += (dismissTarget  - dismissY)  * yEase
+      dismissX += (dismissTargetX - dismissX) * xEase
+      if (Math.abs(dismissTarget  - dismissY)  < 0.4) dismissY = dismissTarget
+      if (Math.abs(dismissTargetX - dismissX) < 0.4) dismissX = dismissTargetX
 
-      handState.dismissed  = dismissed   // HandTracker 스켈레톤 하이라이트 동기화
-      handState.dismissDir = dismissDir  // HandTracker 수평 신호 게이팅용
+      handState.dismissed  = dismissed
+      handState.dismissDir = dismissDir
+      // dismissed 시 carousel-wrap이 아래 CalendarView의 클릭을 막지 않도록
+      wrap.style.pointerEvents = dismissed ? 'none' : ''
 
       const isOffScreen = Math.abs(dismissY) > H * 1.02 || Math.abs(dismissX) > W * 1.02
       scene.style.visibility = isOffScreen ? 'hidden' : 'visible'
