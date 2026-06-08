@@ -41,3 +41,28 @@
   letter-spacing: 0.06em;
   margin: 0;
 }
+
+.motion-site-label {
+  font-size: 10px;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--text);
+  opacity: 0.38;
+  margin: 0;
+}
+
+.motion-launch-btn {
+  margin-top: 8px;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: 'Courier Prime', monospace;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 12px 28px;
+  cursor: pointer;
+  opacity: 0.72;
+  transition: opacity 0.14s, border-color 0.14s;
+}
+.motion-launch-btn:hover { opacity: 1; border-color: var(--text); }

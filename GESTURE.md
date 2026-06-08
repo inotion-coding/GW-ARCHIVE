@@ -110,6 +110,7 @@
 - **Carousel**: `target = Math.round(offset + impulse / (1 - FRIC))` 방식으로 관성 스냅
 
 ### 6. 손등 주먹 유지 → 잠금 / 잠금해제 토글
+- **적용 페이지**: 메인 페이지(`/`)에서만 동작. 다른 경로에서는 매 프레임 강제 언락 유지
 - **감지**: `isFistClosed(lm)` + `isPalmFacing(lm, side)` 동시 만족
 - **동작**: `FIST_HOLD_FRAMES(15프레임)` 연속 유지 시 해당 손 잠금 상태 토글
 - **게이지**: `handState.leftLockProgress` / `rightLockProgress` (0~1)
@@ -132,9 +133,10 @@
 
 ## 잠금 시스템
 
+- **적용 범위**: 메인 페이지(`/`)에서만 잠금 동작. 서브 페이지(`/motion/*` 등)에서는 항상 언락 상태
 - **초기 상태**: 양손 모두 잠금(`leftLocked = true`, `rightLocked = true`)
 - **잠긴 손**: 스켈레톤은 흐릿하게 표시, 모든 제스처 비활성 (잠금 토글 제스처만 가능)
-- **자동 잠금**: 손이 `INACTIVITY_FRAMES(1800프레임 = ~60초)` 이상 미감지 시 자동 잠금
+- **자동 잠금**: 손이 `INACTIVITY_FRAMES(1800프레임 = ~60초)` 이상 미감지 시 자동 잠금 (메인 페이지에서만)
 
 ---
 
@@ -171,4 +173,4 @@ detect(ts) 매 프레임 (30fps 캡)
 
 ---
 
-**Last Updated**: 2026-06-07 (indexPinch 날짜 선택·dismiss overlay·SchedulePage 스크롤 추가)
+**Last Updated**: 2026-06-08 (잠금 시스템 메인 페이지 전용으로 제한, indexPinchColor 추가)

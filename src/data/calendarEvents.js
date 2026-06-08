@@ -1,3 +1,61 @@
+// ── 동적 이벤트 스토어 ──
+const STORAGE_KEY   = 'motion_custom_events'
+const OVERRIDES_KEY = 'motion_event_overrides'
+
+function loadCustom() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}') } catch { return {} }
+}
+function loadOverrides() {
+  try { return JSON.parse(localStorage.getItem(OVERRIDES_KEY) || '{}') } catch { return {} }
+}
+
+let _custom    = loadCustom()
+let _overrides = loadOverrides()
+const _listeners = new Set()
+
+export function getAllEvents(key) {
+  if (_overrides[key] !== undefined) return [..._overrides[key]]
+  return [...(CALENDAR_EVENTS[key] ?? []), ...(_custom[key] ?? [])]
+}
+
+export function addEvent(key, event) {
+  if (_overrides[key] !== undefined) {
+    _overrides[key] = [..._overrides[key], event].sort((a, b) => a.time.localeCompare(b.time))
+    try { localStorage.setItem(OVERRIDES_KEY, JSON.stringify(_overrides)) } catch {}
+  } else {
+    if (!_custom[key]) _custom[key] = []
+    _custom[key].push(event)
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(_custom)) } catch {}
+  }
+  _listeners.forEach(fn => fn())
+}
+
+export function moveEvent(fromKey, eventIdx, toKey) {
+  const fromEvents = getAllEvents(fromKey)
+  const toEvents   = getAllEvents(toKey)
+  if (eventIdx < 0 || eventIdx >= fromEvents.length) return
+  const [event]  = fromEvents.splice(eventIdx, 1)
+  const toSorted = [...toEvents, { ...event }].sort((a, b) => a.time.localeCompare(b.time))
+  _overrides[fromKey] = fromEvents
+  _overrides[toKey]   = toSorted
+  try { localStorage.setItem(OVERRIDES_KEY, JSON.stringify(_overrides)) } catch {}
+  _listeners.forEach(fn => fn())
+}
+
+export function deleteEvent(key, eventIdx) {
+  const events = getAllEvents(key)
+  if (eventIdx < 0 || eventIdx >= events.length) return
+  events.splice(eventIdx, 1)
+  _overrides[key] = events
+  try { localStorage.setItem(OVERRIDES_KEY, JSON.stringify(_overrides)) } catch {}
+  _listeners.forEach(fn => fn())
+}
+
+export function subscribeEvents(fn) {
+  _listeners.add(fn)
+  return () => _listeners.delete(fn)
+}
+
 // category: 'work' | 'personal' | 'health' | 'social'
 export const CALENDAR_EVENTS = {
   // ── May 2026 ──

@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CALENDAR_EVENTS } from '../data/calendarEvents'
+import { getAllEvents, subscribeEvents } from '../data/calendarEvents'
 import handState from '../utils/handState'
 import '../styles/schedule-page.css'
 
@@ -17,8 +17,8 @@ function getUpcoming(days = 60) {
     const d   = new Date(today)
     d.setDate(today.getDate() + i)
     const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
-    const evs = CALENDAR_EVENTS[key]
-    if (evs?.length) result.push({ date: d, key, events: evs })
+    const evs = getAllEvents(key)
+    if (evs.length) result.push({ date: d, key, events: evs })
   }
   return result
 }
@@ -27,6 +27,8 @@ export default function SchedulePage() {
   const navigate   = useNavigate()
   const today      = new Date()
   today.setHours(0, 0, 0, 0)
+  const [, setTick] = useState(0)
+  useEffect(() => subscribeEvents(() => setTick(t => t + 1)), [])
   const upcoming   = getUpcoming(60)
   const events14   = getUpcoming(14).reduce((s, g) => s + g.events.length, 0)
 

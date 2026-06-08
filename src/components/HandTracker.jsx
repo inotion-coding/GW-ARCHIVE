@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision'
 import handState from '../utils/handState'
 import '../styles/hand-tracker.css'
@@ -165,11 +166,11 @@ function drawHand(lm, ctx, W, H, highlight, isDark, flashColor = null) {
 }
 
 
-function drawPinchDot(lm, tipA, tipB, ctx, W, H, isDark) {
+function drawPinchDot(lm, tipA, tipB, ctx, W, H, isDark, colorOverride) {
   const ptX = i => (1 - lm[i].x) * W
   const ptY = i => lm[i].y * H
   const mid = { x: (ptX(tipA) + ptX(tipB)) / 2, y: (ptY(tipA) + ptY(tipB)) / 2 }
-  ctx.fillStyle = isDark ? 'rgba(230,230,230,0.95)' : 'rgba(25,25,25,0.95)'
+  ctx.fillStyle = colorOverride ?? (isDark ? 'rgba(230,230,230,0.95)' : 'rgba(25,25,25,0.95)')
   ctx.beginPath(); ctx.arc(mid.x, mid.y, 7, 0, Math.PI * 2); ctx.fill()
   return mid
 }
@@ -202,8 +203,11 @@ function drawRotationArc(lm, ctx, W, H, side, isDark) {
 }
 
 export default function HandTracker() {
-  const videoRef  = useRef(null)
-  const canvasRef = useRef(null)
+  const videoRef   = useRef(null)
+  const canvasRef  = useRef(null)
+  const location   = useLocation()
+  const locationRef = useRef(location.pathname)
+  locationRef.current = location.pathname
 
   useEffect(() => {
     let landmarker   = null
@@ -636,7 +640,7 @@ export default function HandTracker() {
               if (info.activePinch) drawPinchDot(gestureLms[i], 4, 12, ctx, W, H, isDark)
             })
             backInfos.forEach((info, i) => {
-              if (info.activePinch) drawPinchDot(gestureLms[i], 4, 8, ctx, W, H, isDark)
+              if (info.activePinch) drawPinchDot(gestureLms[i], 4, 8, ctx, W, H, isDark, handState.indexPinchColor)
             })
 
             const activeLm = scrollActive >= 0 ? gestureLms[scrollActive] : null
@@ -663,70 +667,82 @@ export default function HandTracker() {
         }
       }
 
-      // ── 손등 주먹 3초 유지 → 잠금 토글 ──
+      // ── 손등 주먹 3초 유지 → 잠금 토글 (메인 페이지에서만) ──
 
-      // 재발동 방지 쿨다운
-      for (const side of ['Left', 'Right']) {
-        if (lockState[side].cooldown > 0) lockState[side].cooldown--
-      }
+      if (locationRef.current !== '/') {
+        // 메인 페이지가 아니면 항상 언락 상태 유지
+        handState.leftLocked        = false
+        handState.rightLocked       = false
+        handState.leftLockProgress  = 0
+        handState.rightLockProgress = 0
+        for (const side of ['Left', 'Right']) {
+          lockState[side].holdFrames = 0
+          lockState[side].missFrames = 0
+        }
+      } else {
+        // 재발동 방지 쿨다운
+        for (const side of ['Left', 'Right']) {
+          if (lockState[side].cooldown > 0) lockState[side].cooldown--
+        }
 
-      for (let hi = 0; hi < lms.length; hi++) {
-        const lm   = lms[hi]
-        const side = handedness[hi]?.[0]?.categoryName
-        if (!side || !lockState[side]) continue
-        if (isInHandBackZone(lm, side)) continue  // 손등 ±20° 구간 — 잠금 제스처도 차단
+        for (let hi = 0; hi < lms.length; hi++) {
+          const lm   = lms[hi]
+          const side = handedness[hi]?.[0]?.categoryName
+          if (!side || !lockState[side]) continue
+          if (isInHandBackZone(lm, side)) continue  // 손등 ±20° 구간 — 잠금 제스처도 차단
 
-        const ls  = lockState[side]
-        const key = side === 'Left' ? 'leftLocked' : 'rightLocked'
-        ls.lastSeenFrame = frameCount
+          const ls  = lockState[side]
+          const key = side === 'Left' ? 'leftLocked' : 'rightLocked'
+          ls.lastSeenFrame = frameCount
 
-        // 완전한 주먹 + 손바닥이 카메라를 향함
-        const isGesture = isFistClosed(lm) && isPalmFacing(lm, side)
-        const progressKey = side === 'Left' ? 'leftLockProgress'  : 'rightLockProgress'
-        const flashKey    = side === 'Left' ? 'leftLockFlash'     : 'rightLockFlash'
+          // 완전한 주먹 + 손바닥이 카메라를 향함
+          const isGesture = isFistClosed(lm) && isPalmFacing(lm, side)
+          const progressKey = side === 'Left' ? 'leftLockProgress'  : 'rightLockProgress'
+          const flashKey    = side === 'Left' ? 'leftLockFlash'     : 'rightLockFlash'
 
-        if (isGesture && ls.cooldown === 0) {
-          ls.holdFrames++
-          ls.missFrames = 0
-          handState[progressKey] = Math.min(ls.holdFrames / FIST_HOLD_FRAMES, 1)
-          if (ls.holdFrames >= FIST_HOLD_FRAMES) {
-            const nowLocked = !handState[key]
-            handState[key]         = nowLocked
-            handState[flashKey]    = nowLocked ? 'lock' : 'unlock'
-            handState[progressKey] = 0
-            ls.cooldown   = FLASH_FRAMES
-            ls.holdFrames = 0
-          }
-        } else {
-          // 5프레임 연속 미감지 시에만 리셋 (노이즈 1~2프레임은 무시)
-          ls.missFrames++
-          if (ls.missFrames >= 3) {
-            handState[progressKey] = 0
-            ls.holdFrames = 0
+          if (isGesture && ls.cooldown === 0) {
+            ls.holdFrames++
             ls.missFrames = 0
+            handState[progressKey] = Math.min(ls.holdFrames / FIST_HOLD_FRAMES, 1)
+            if (ls.holdFrames >= FIST_HOLD_FRAMES) {
+              const nowLocked = !handState[key]
+              handState[key]         = nowLocked
+              handState[flashKey]    = nowLocked ? 'lock' : 'unlock'
+              handState[progressKey] = 0
+              ls.cooldown   = FLASH_FRAMES
+              ls.holdFrames = 0
+            }
+          } else {
+            // 5프레임 연속 미감지 시에만 리셋 (노이즈 1~2프레임은 무시)
+            ls.missFrames++
+            if (ls.missFrames >= 3) {
+              handState[progressKey] = 0
+              ls.holdFrames = 0
+              ls.missFrames = 0
+            }
           }
         }
-      }
 
-      // 이번 프레임에 감지되지 않은 손: missFrames 증가 → 게이지 초기화
-      for (const side of ['Left', 'Right']) {
-        const ls = lockState[side]
-        if (ls.lastSeenFrame !== frameCount && ls.holdFrames > 0) {
-          ls.missFrames++
-          if (ls.missFrames >= 3) {
-            const progressKey = side === 'Left' ? 'leftLockProgress' : 'rightLockProgress'
-            handState[progressKey] = 0
-            ls.holdFrames = 0
-            ls.missFrames = 0
+        // 이번 프레임에 감지되지 않은 손: missFrames 증가 → 게이지 초기화
+        for (const side of ['Left', 'Right']) {
+          const ls = lockState[side]
+          if (ls.lastSeenFrame !== frameCount && ls.holdFrames > 0) {
+            ls.missFrames++
+            if (ls.missFrames >= 3) {
+              const progressKey = side === 'Left' ? 'leftLockProgress' : 'rightLockProgress'
+              handState[progressKey] = 0
+              ls.holdFrames = 0
+              ls.missFrames = 0
+            }
           }
         }
-      }
 
-      // 비활성 자동 잠금 (1분간 손 미감지)
-      for (const side of ['Left', 'Right']) {
-        const key = side === 'Left' ? 'leftLocked' : 'rightLocked'
-        if (!handState[key] && frameCount - lockState[side].lastSeenFrame > INACTIVITY_FRAMES) {
-          handState[key] = true
+        // 비활성 자동 잠금 (1분간 손 미감지)
+        for (const side of ['Left', 'Right']) {
+          const key = side === 'Left' ? 'leftLocked' : 'rightLocked'
+          if (!handState[key] && frameCount - lockState[side].lastSeenFrame > INACTIVITY_FRAMES) {
+            handState[key] = true
+          }
         }
       }
 

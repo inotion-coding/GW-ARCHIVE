@@ -9,7 +9,7 @@ const SLOTS = 11
 const HALF  = 5
 
 const EASE   = 0.10
-const FRIC   = 0.92
+const FRIC   = 0.97
 const SENS   = 0.005
 
 // 페이지 이동 후 복귀 시 마지막 위치 유지

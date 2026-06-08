@@ -24,7 +24,7 @@
 | 3 | 3 | Calendar | `#b8c0b8` | 홀로그래픽 링/토러스 (3D 추상) |
 | 4 | 4 | Weather | `#d0d0d0` | 복숭아빛 유체 그라데이션 (3D 추상) |
 | 5 | 5 | Timer | `#b0c0c8` | 앰버 글로우 구체 (3D 추상) |
-| 6 | 6 | Placeholder 1 | `#c0b8c0` | 흰색 클레이 블롭 (3D 추상) |
+| 6 | 6 | Megastudy | `#c0b8c0` | 흰색 클레이 블롭 (3D 추상) |
 | 7 | 7 | Placeholder 2 | `#c8c0b0` | 흰색 물결 능선 조형 (3D 추상) |
 | 8 | 8 | Placeholder 3 | `#b8b0b0` | 라벤더·옐로 파스텔 구체 (3D 추상) |
 | 9 | 9 | Placeholder 4 | `#a8b8a8` | 흰 모래 물결 질감 (3D 추상) |
@@ -59,9 +59,10 @@
 - **설명**: 카운트다운 타이머 또는 스톱워치 기능. 제스처로 시작/정지 조작 예정.
 - **상태**: 개발 중
 
-### Card 6 — Placeholder 1
-- **주제**: 미정
-- **상태**: 콘텐츠 미구현
+### Card 6 — Megastudy
+- **주제**: 메가스터디 링크 런처
+- **설명**: megastudy.net 사이트를 새 탭으로 열어주는 링크 런처 페이지. MegastudyPage(`/motion/6`)로 라우팅.
+- **상태**: 구현 완료
 
 ### Card 7 — Placeholder 2
 - **주제**: 미정
@@ -89,4 +90,4 @@
 
 ---
 
-**Last Updated**: 2026-06-07 (Card 10 Placeholder 5 → Documents 문서 뷰어로 변경)
+**Last Updated**: 2026-06-08 (Card 6 Placeholder 1 → Megastudy 링크 런처로 변경)
