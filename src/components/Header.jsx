@@ -12,7 +12,7 @@ export default function Header() {
 
   return (
     <header>
-      <span>GW Archive</span>
+      <span>GW ARCHIVE</span>
       <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
         <button className="theme-toggle" onClick={() => setDark(d => !d)}>
           {dark ? 'Light' : 'Dark'}
