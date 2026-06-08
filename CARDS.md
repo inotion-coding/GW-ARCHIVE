@@ -56,8 +56,8 @@
 
 ### Card 5 — Timer
 - **주제**: 타이머 / 스톱워치
-- **설명**: 카운트다운 타이머 또는 스톱워치 기능. 제스처로 시작/정지 조작 예정.
-- **상태**: 개발 중
+- **설명**: 카운트다운 타이머. 1m·3m·5m·10m 프리셋, SVG 원형 프로그레스 링, 완료 시 비프음. TimerPage(`/motion/5`)로 라우팅.
+- **상태**: 구현 완료
 
 ### Card 6 — Megastudy
 - **주제**: 메가스터디 링크 런처
@@ -90,4 +90,4 @@
 
 ---
 
-**Last Updated**: 2026-06-08 (Card 6 Placeholder 1 → Megastudy 링크 런처로 변경)
+**Last Updated**: 2026-06-08 (Card 5 Timer 복구 — cards.js 추가 및 /motion/5 라우트 연결)

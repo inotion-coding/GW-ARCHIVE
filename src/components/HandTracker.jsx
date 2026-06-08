@@ -18,12 +18,13 @@ const CONNECTIONS = [
 const SCROLL_RATIO      = 0.33
 const SCROLL_HYSTERESIS = 1.30  // 핀치 유지 임계값 배율 (0.33 → 0.43)
 const ZOOM_RATIO    = 0.20
-const BACK_RATIO    = 0.25   // 뒤로가기 더블탭
+const INDEX_PINCH_RATIO = 0.25  // 단일 엄지+검지 핀치 감지 임계값 (캘린더 드래그용)
 const HAND_SENS     = 26
 const DX_DEAD_ZONE  = 0.002
 const ZOOM_SENS     = 2.2
 const TAP_THRESHOLD = 0.04
-const DB_TAP_WINDOW   = 9     // 더블탭 인식 시간 창 (프레임, ~0.3초 at 30fps)
+const BACK_DBL_FRAMES     = 18   // 뒤로가기 더블탭 시간 창 (프레임, ~0.6초 at 30fps)
+const BACK_MOVE_THRESHOLD = 0.04 // 이 이상 스크롤하면 탭 미인식 (스크롤 vs 더블탭 구분)
 const FIST_HOLD_FRAMES  = 15    // 주먹 유지 필요 프레임 (~0.5초 at 30fps)
 const INACTIVITY_FRAMES = 1800  // 자동 잠금 비활성 프레임 (~60초 at 30fps)
 const FLASH_FRAMES      = 45    // 색상 플래시 지속 프레임 (~1.5초)
@@ -31,7 +32,7 @@ const BACK_ZONE_COS     = Math.cos(20 * Math.PI / 180)  // 손등 기준 ±20° 
 const TRI_PINCH_RATIO   = 0.28   // 엄지+검지+중지 3핀치 임계 비율
 
 // 회전 감지 파라미터
-const ROT_IMPULSE  = 0.45   // 발동 시 임펄스 속도 (FRIC=0.92 기준 약 5.6 카드 이동)
+const ROT_IMPULSE  = 0.15   // 발동 시 임펄스 속도 (FRIC=0.97 기준 5 카드 이동)
 const ROT_COOLDOWN = 22     // 발동 후 재발동 방지 프레임 (~0.7초 at 30fps)
 
 // 중지·약지·소지가 접혀 있는지 (검지 제외 주먹 판별)
@@ -222,7 +223,7 @@ export default function HandTracker() {
     let frameCount      = 0
     let doubleTapCount  = 0
     let doubleTapFrame  = 0
-    let wasBackPinching      = false
+    let pinchMoveAccum       = 0      // 현재 핀치 중 누적 이동량 (더블탭 vs 스크롤 구분)
     let lastScrollMidY       = null   // 양손 수직 드래그 추적용
     let wasBothScrollPinching = false // 양손 핀치 히스테리시스용
     let lastTriPinchX = { Left: null, Right: null } // 3핀치 손목 X 추적 (수평 드래그용)
@@ -266,6 +267,8 @@ export default function HandTracker() {
       handState.rotDx             = 0
       handState.dismissActive      = false
       handState.dismissDragXActive = false
+      handState.bothZoomActive    = false
+      handState.zoomMidY          = 0
     }
 
     function detect(ts) {
@@ -291,7 +294,7 @@ export default function HandTracker() {
       if (lms.length === 0) {
         if (wasPinching) { handState.snap = true; wasPinching = false }
         lastX = null; lastZoomDist = null; lastIndexY = null; tapFired = false; lastScrollMidY = null
-        doubleTapCount = 0; wasBackPinching = false; wasBothScrollPinching = false
+        doubleTapCount = 0; pinchMoveAccum = 0; wasBothScrollPinching = false
         lastTriPinchX.Left = null; lastTriPinchX.Right = null
         rollState.Left.lastAngle  = null; rollState.Left.cumAngle  = 0; rollState.Left.startPalmFacing  = null
         rollState.Right.lastAngle = null; rollState.Right.cumAngle = 0; rollState.Right.startPalmFacing = null
@@ -349,10 +352,11 @@ export default function HandTracker() {
         }
         return info
       })
+      // 단일 엄지+검지 핀치 (캘린더 드래그 위치 추적용)
       const backInfos = gestureLms.map((lm, i) => {
         if (backZoneMask[i] || isLooseFist(lm) || isIndexOnly(lm))
           return { activePinch: false, midX: 0, midY: 0 }
-        return analyzePinch(lm, 4, 8, BACK_RATIO)
+        return analyzePinch(lm, 4, 8, INDEX_PINCH_RATIO)
       })
 
       const firstLmFist = gestureLms.find((_, i) => !backZoneMask[i]) ?? null
@@ -366,8 +370,8 @@ export default function HandTracker() {
         const side = gestureHandedness[i]?.[0]?.categoryName
         if (side) triPinchHands[side] = { lm: gestureLms[i], idx: i }
       }
-      const rightTriPinch = activePinchCountPre < 2 && !!triPinchHands['Left']  && analyzeTriPinch(triPinchHands['Left'].lm,  TRI_PINCH_RATIO)
-      const leftTriPinch  = activePinchCountPre < 2 && !!triPinchHands['Right'] && analyzeTriPinch(triPinchHands['Right'].lm, TRI_PINCH_RATIO)
+      const rightTriPinch = activePinchCountPre < 2 && !!triPinchHands['Left']  && !isFistClosed(triPinchHands['Left'].lm)  && analyzeTriPinch(triPinchHands['Left'].lm,  TRI_PINCH_RATIO)
+      const leftTriPinch  = activePinchCountPre < 2 && !!triPinchHands['Right'] && !isFistClosed(triPinchHands['Right'].lm) && analyzeTriPinch(triPinchHands['Right'].lm, TRI_PINCH_RATIO)
       const anyTriPinch   = rightTriPinch || leftTriPinch
 
       // ── 손 회전 감지 ──
@@ -377,18 +381,6 @@ export default function HandTracker() {
       // ── 엄지+검지 더블탭 (단일 손, 잠금 해제) → 뒤로 가기 ──
       frameCount++
       const isSingleZoomPinch = !bothZoomPinch && !anyScrollPinch && backInfos.some(b => b.activePinch)
-      if (isSingleZoomPinch && !wasBackPinching) {
-        if (doubleTapCount === 1 && (frameCount - doubleTapFrame) < DB_TAP_WINDOW) {
-          handState.back = true
-          doubleTapCount = 0
-        } else {
-          doubleTapCount = 1
-          doubleTapFrame = frameCount
-        }
-      } else if (!isSingleZoomPinch && doubleTapCount > 0 && (frameCount - doubleTapFrame) > DB_TAP_WINDOW * 2) {
-        doubleTapCount = 0
-      }
-      wasBackPinching = isSingleZoomPinch
 
       // 단일 엄지+검지 핀치 중심 노출 (캘린더 날짜 선택용)
       handState.indexPinchActive = isSingleZoomPinch
@@ -471,6 +463,7 @@ export default function HandTracker() {
       if (anyTriPinch) {
         if (wasPinching) { handState.snap = true; wasPinching = false }
         lastZoomDist = null; lastScrollMidY = null; lastIndexY = null; tapFired = false
+        doubleTapCount = 0; pinchMoveAccum = 0
         handState.activePinch = false; handState.dx = 0; handState.fingerX = -1
         handState.zoomDelta = 0; wasZoomPinching = false; wasBothScrollPinching = false
         handState.dismissDragXActive = true
@@ -491,8 +484,14 @@ export default function HandTracker() {
           }
           lastTriPinchX.Left = mx
           drawHand(lm, ctx, W, H, true, isDark, null)
-          drawPinchDot(lm, 4, 8,  ctx, W, H, isDark)
-          drawPinchDot(lm, 4, 12, ctx, W, H, isDark)
+          {
+            const ptX = i => (1 - lm[i].x) * W
+            const ptY = i => lm[i].y * H
+            const cx = (ptX(4) + ptX(8) + ptX(12)) / 3
+            const cy = (ptY(4) + ptY(8) + ptY(12)) / 3
+            ctx.fillStyle = isDark ? 'rgba(230,230,230,0.92)' : 'rgba(25,25,25,0.92)'
+            ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI * 2); ctx.fill()
+          }
         } else {
           lastTriPinchX.Left = null
         }
@@ -512,8 +511,14 @@ export default function HandTracker() {
           }
           lastTriPinchX.Right = mx
           drawHand(lm, ctx, W, H, true, isDark, null)
-          drawPinchDot(lm, 4, 8,  ctx, W, H, isDark)
-          drawPinchDot(lm, 4, 12, ctx, W, H, isDark)
+          {
+            const ptX = i => (1 - lm[i].x) * W
+            const ptY = i => lm[i].y * H
+            const cx = (ptX(4) + ptX(8) + ptX(12)) / 3
+            const cy = (ptY(4) + ptY(8) + ptY(12)) / 3
+            ctx.fillStyle = isDark ? 'rgba(230,230,230,0.92)' : 'rgba(25,25,25,0.92)'
+            ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI * 2); ctx.fill()
+          }
         } else {
           lastTriPinchX.Right = null
         }
@@ -538,17 +543,22 @@ export default function HandTracker() {
           handState.zoomDelta = (zoomDist - lastZoomDist) * ZOOM_SENS
         }
         lastZoomDist = zoomDist
+        handState.bothZoomActive = true
+        handState.zoomMidY = (zoomInfos[0].midY + zoomInfos[1].midY) / 2
 
         if (wasPinching) { handState.snap = true }
         wasPinching = false; wasZoomPinching = true; wasBothScrollPinching = false
+        doubleTapCount = 0; pinchMoveAccum = 0
         lastX = null; lastScrollMidY = null; lastIndexY = null; tapFired = false
         handState.dx = 0; handState.activePinch = false; handState.fingerX = -1
 
       } else {
         lastTriPinchX.Left = null; lastTriPinchX.Right = null
-        lastZoomDist        = null
-        handState.zoomDelta = 0
-        wasZoomPinching     = false
+        lastZoomDist             = null
+        handState.zoomDelta      = 0
+        wasZoomPinching          = false
+        handState.bothZoomActive = false
+        handState.zoomMidY       = 0
 
         const scrollActive     = scrollInfos.findIndex(p => p.activePinch)
         const activePinchCount = scrollInfos.filter(s => s.activePinch).length
@@ -648,16 +658,39 @@ export default function HandTracker() {
 
             if (activeLm) {
               const mirroredX = 1 - activeLm[0].x
+              if (!wasPinching) pinchMoveAccum = 0  // 새 핀치 시작 시 초기화
               if (lastX !== null) {
-                const raw    = mirroredX - lastX
-                handState.dx = Math.abs(raw) > DX_DEAD_ZONE ? raw * HAND_SENS : 0
+                const raw = mirroredX - lastX
+                if (Math.abs(raw) > DX_DEAD_ZONE) {
+                  handState.dx = raw * HAND_SENS
+                  pinchMoveAccum += Math.abs(raw)
+                } else {
+                  handState.dx = 0
+                }
               }
               lastX = mirroredX
               const sInfo = scrollInfos[scrollActive]
               handState.pinchMidX = 1 - sInfo.midX
               handState.pinchMidY = sInfo.midY
             } else {
-              if (wasPinching) { handState.snap = true }
+              if (wasPinching) {
+                handState.snap = true
+                // 엄지+중지 더블탭 → 뒤로가기 (스크롤 이동이 적을 때만)
+                if (pinchMoveAccum < BACK_MOVE_THRESHOLD) {
+                  if (doubleTapCount === 1 && (frameCount - doubleTapFrame) < BACK_DBL_FRAMES) {
+                    handState.back = true
+                    doubleTapCount = 0
+                  } else {
+                    doubleTapCount = 1
+                    doubleTapFrame = frameCount
+                  }
+                }
+                pinchMoveAccum = 0
+              }
+              // 더블탭 카운트 타임아웃
+              if (!wasPinching && doubleTapCount > 0 && (frameCount - doubleTapFrame) > BACK_DBL_FRAMES) {
+                doubleTapCount = 0
+              }
               lastX = null; handState.dx = 0
               handState.pinchMidX = 0; handState.pinchMidY = 0
             }

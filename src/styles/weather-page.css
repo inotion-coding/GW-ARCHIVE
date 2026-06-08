@@ -1,0 +1,476 @@
+.weather-root {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: stretch;
+  padding: 72px 60px 52px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Courier Prime', monospace;
+}
+
+.weather-back {
+  position: fixed;
+  top: 24px;
+  left: 24px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 22px;
+  cursor: pointer;
+  opacity: 0.42;
+  transition: opacity 0.14s;
+  font-family: inherit;
+  padding: 4px;
+  line-height: 1;
+}
+.weather-back:hover { opacity: 1; }
+
+.weather-status {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.35;
+}
+
+/* ── 좌 패널 ── */
+.weather-main {
+  flex: 0 0 62%;
+  max-width: 62%;
+  display: flex;
+  flex-direction: column;
+  padding-right: 60px;
+  border-right: 1px solid var(--border);
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.weather-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 36px;
+}
+
+.weather-label {
+  font-size: 13px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  opacity: 0.45;
+}
+
+.weather-city {
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  opacity: 0.60;
+}
+
+/* ── 히어로 그룹 (정중앙 배치) ── */
+.weather-hero-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+}
+
+/* ── 히어로 ── */
+.weather-hero {
+  display: flex;
+  align-items: center;
+  gap: 36px;
+}
+
+.weather-emoji {
+  font-size: 96px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.weather-hero-right {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.weather-temp-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  line-height: 1;
+}
+
+.weather-temp {
+  font-size: 100px;
+  letter-spacing: -0.03em;
+  opacity: 0.90;
+  line-height: 1;
+}
+
+.weather-unit {
+  font-size: 32px;
+  opacity: 0.50;
+  margin-top: 14px;
+}
+
+.weather-condition {
+  font-size: 16px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+.weather-stats {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 13px;
+  letter-spacing: 0.07em;
+  opacity: 0.55;
+}
+
+.weather-sep { opacity: 0.35; }
+
+/* ── 시간별 예보 ── */
+.weather-hourly-wrap {
+  margin-top: auto;
+  padding-top: 28px;
+  border-top: 1px solid var(--border);
+}
+
+.weather-section-label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  opacity: 0.35;
+  margin-bottom: 18px;
+}
+
+.weather-hourly {
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.weather-hourly::-webkit-scrollbar { display: none; }
+
+.weather-hour {
+  flex-shrink: 0;
+  min-width: calc(100% / 6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 14px 1px;
+  opacity: 0.38;
+}
+
+.weather-hour--now {
+  opacity: 1;
+  border-left: 1px solid var(--border);
+}
+
+.weather-hour-time {
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.weather-hour-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.weather-hour-temp {
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  font-weight: bold;
+}
+
+.weather-hour-prec {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  opacity: 0.80;
+  color: #6aacde;
+}
+
+/* ── 우 패널: 7일 예보 ── */
+.weather-panel {
+  flex: 0 0 38%;
+  max-width: 38%;
+  display: flex;
+  flex-direction: column;
+  padding: 0 44px 0 52px;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.weather-daily {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+  flex: 1;
+  min-height: 0;
+}
+
+.weather-day {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 0 0 20px;
+  flex: 1;
+  border-bottom: 1px solid var(--border);
+  opacity: 0.48;
+}
+
+.weather-day--today { opacity: 1; }
+
+.weather-day-name {
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  width: 46px;
+  flex-shrink: 0;
+}
+
+.weather-day-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  width: 26px;
+  text-align: center;
+}
+
+/* ── 온도 범위 바 ── */
+.weather-day-bar-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.weather-day-bar {
+  position: relative;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.weather-day-bar-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--text);
+  opacity: 0.55;
+  border-radius: 2px;
+}
+
+.weather-day--today .weather-day-bar-fill {
+  opacity: 0.88;
+}
+
+.weather-day-prec {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: #6aacde;
+  opacity: 0.90;
+}
+
+/* ── 기온 숫자 ── */
+.weather-day-range {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.weather-day-hi    { opacity: 0.90; }
+.weather-day-slash { opacity: 0.25; }
+.weather-day-lo    { opacity: 0.45; }
+
+/* ── 드래그 인터랙션 ── */
+
+/* 잡힌 날짜 행 */
+.weather-day--dragging {
+  opacity: 0.20;
+}
+
+/* 현재 표시 중인 날짜 행 */
+.weather-day--focused {
+  opacity: 1;
+  position: relative;
+}
+.weather-day--focused::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 48%;
+  background: var(--text);
+  opacity: 0.55;
+  border-radius: 1px;
+}
+
+/* 드롭 가능 상태일 때 좌 패널 테두리 강조 */
+.weather-main--drop {
+  border-right-color: var(--text);
+}
+.weather-main--drop .weather-label {
+  opacity: 0.75;
+}
+
+/* Today ↩ 리셋 버튼 */
+.weather-reset-btn {
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  color: var(--text);
+  opacity: 0.40;
+  padding: 2px 0;
+  transition: opacity 0.12s;
+}
+.weather-reset-btn:hover { opacity: 0.90; }
+
+/* 강수 강조 색상 */
+.weather-prec-accent {
+  color: #6aacde;
+}
+
+/* ── 고스트 드래그 카드 ── */
+.weather-drag-ghost {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 300;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 12px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  transition: border-color 0.12s;
+}
+
+.weather-drag-ghost--drop {
+  border-color: var(--text);
+}
+
+.weather-drag-ghost-icon {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.weather-drag-ghost-name {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.55;
+  font-family: 'Courier Prime', monospace;
+}
+
+.weather-drag-ghost-temp {
+  font-size: 18px;
+  letter-spacing: 0.04em;
+  font-family: 'Courier Prime', monospace;
+}
+
+/* ── weather-main expanded: hourly 확장 ── */
+
+/* hero 부드럽게 접힘 */
+.weather-hero-group {
+  transition: max-height 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+              opacity 0.28s ease;
+  max-height: 600px;
+  overflow: hidden;
+}
+.weather-main--expanded .weather-hero-group {
+  max-height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* hourly-wrap: flex: 1로 공간 채우며 올라옴 */
+.weather-hourly-wrap {
+  transition: flex-grow 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.weather-main--expanded .weather-hourly-wrap {
+  flex: 1;
+  margin-top: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  animation: hourlyRise 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes hourlyRise {
+  from { transform: translateY(18px); opacity: 0.4; }
+  to   { transform: translateY(0);    opacity: 1;   }
+}
+
+/* 확장 시 세로 리스트로 전환 */
+.weather-main--expanded .weather-hourly {
+  flex-direction: column;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  flex: 1;
+  min-height: 0;
+}
+.weather-main--expanded .weather-hourly::-webkit-scrollbar { display: none; }
+
+.weather-main--expanded .weather-hour {
+  flex-direction: row;
+  min-width: unset;
+  width: 100%;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0;
+  padding: 17px 0;
+  border-bottom: 1px solid var(--border);
+  border-left: none;
+  opacity: 0.52;
+}
+.weather-main--expanded .weather-hour--now { opacity: 1; }
+
+.weather-main--expanded .weather-hour-time {
+  font-size: 12px;
+  letter-spacing: 0.10em;
+  width: 60px;
+  flex-shrink: 0;
+  text-align: left;
+}
+.weather-main--expanded .weather-hour-icon {
+  font-size: 22px;
+  width: 36px;
+  flex-shrink: 0;
+  text-align: center;
+}
+.weather-main--expanded .weather-hour-temp {
+  font-size: 16px;
+  font-weight: bold;
+  width: 48px;
+  flex-shrink: 0;
+  text-align: right;
+}
+.weather-main--expanded .weather-hour-prec {
+  font-size: 12px;
+  margin-left: 20px;
+  opacity: 0.85;
+}

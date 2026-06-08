@@ -40,14 +40,14 @@ export default function SchedulePage() {
     function poll() {
       if (handState.back) { handState.back = false; navigate('/'); return }
 
-      if (handState.activePinch) {
+      if (handState.indexPinchActive) {
         if (lastPinchY !== null) {
-          const dy = handState.pinchMidY - lastPinchY
+          const dy = handState.indexPinchMidY - lastPinchY
           if (list && Math.abs(dy) > 0.0005) {
             list.scrollTop += dy * window.innerHeight * 1.75
           }
         }
-        lastPinchY = handState.pinchMidY
+        lastPinchY = handState.indexPinchMidY
       } else {
         lastPinchY = null
       }

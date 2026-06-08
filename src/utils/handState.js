@@ -14,6 +14,8 @@ const handState = {
   indexPinchMidX:   0,     // 엄지+검지 핀치 중심 X (미러, 0~1)
   indexPinchMidY:   0,     // 엄지+검지 핀치 중심 Y (0~1)
   indexPinchColor:  null,  // 핀치 원 색상 오버라이드 (null = 기본색, string = CSS 색상)
+  bothZoomActive: false,   // 양손 엄지+검지 동시 핀치 활성
+  zoomMidY:       0,       // 양손 핀치 중심 Y 평균 (0~1)
   back:        false,  // 더블탭 → 이전 페이지 트리거
   rotDx:       0,      // 손 회전: 오른손(+), 왼손(−) → 연속 스크롤 속도
   dragging:    false,  // 마우스/터치 드래그 중 (회전 제스처 차단용)

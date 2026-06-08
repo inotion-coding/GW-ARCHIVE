@@ -374,6 +374,58 @@
   border: none;
 }
 
+/* ── 핀치 드래그 ── */
+
+/* 잡힌 파일 항목 */
+.fv-file-item--pinch-dragging {
+  opacity: 0.20;
+}
+
+/* 드롭 가능 상태 메인 영역 */
+.fv-main--drop {
+  background: rgba(128, 128, 128, 0.04);
+  border-left-color: var(--text);
+}
+
+/* 고스트 카드 */
+.fv-pinch-ghost {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 400;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-width: 200px;
+  transition: border-color 0.12s;
+  font-family: 'Courier Prime', monospace;
+}
+
+.fv-pinch-ghost--drop {
+  border-color: var(--text);
+}
+
+.fv-pinch-ghost-tag {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text);
+  opacity: 0.45;
+}
+
+.fv-pinch-ghost-name {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  opacity: 0.80;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* 오류 / 안내 */
 .fv-empty-msg {
   color: var(--text);

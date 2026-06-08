@@ -14,7 +14,7 @@
 | `dx` | number | 프레임당 스크롤 이동량 (핀치 이동 기반) |
 | `snap` | boolean | 핀치 해제 시 가장 가까운 카드로 스냅 트리거 |
 | `zoomDelta` | number | 양손 줌 프레임당 변화량 |
-| `rotDx` | number | 손 회전 임펄스 속도 (FRIC=0.92 기준 ~5.6 카드 이동) |
+| `rotDx` | number | 손 회전 임펄스 속도 (FRIC=0.97 기준 정확히 5 카드 이동) |
 | `click` | boolean | 검지 탭 클릭 트리거 |
 | `clickX` / `clickY` | number | 클릭 시 검지 끝 좌표 (미러, 0~1) |
 | `pinchMidX` / `pinchMidY` | number | 엄지+중지 핀치 중심 좌표 (미러, 0~1) — activePinch 시 유효 |
@@ -42,18 +42,19 @@
 | `SCROLL_RATIO` | 0.33 | 엄지+중지 핀치 진입 임계 비율 |
 | `SCROLL_HYSTERESIS` | 1.30 | 핀치 유지 임계 배율 (유지 시 0.33 × 1.3 = 0.43 적용) |
 | `ZOOM_RATIO` | 0.20 | 엄지+검지 양손 줌 핀치 임계 비율 |
-| `BACK_RATIO` | 0.25 | 엄지+검지 뒤로가기 핀치 임계 비율 |
+| `INDEX_PINCH_RATIO` | 0.25 | 단일 엄지+검지 핀치 임계 비율 (캘린더 드래그용) |
 | `TRI_PINCH_RATIO` | 0.28 | 엄지+검지+중지 3핀치 임계 비율 (좌우 dismiss) |
-| `HAND_SENS` | 20 | 핀치 이동 감도 |
-| `DX_DEAD_ZONE` | 0.004 | 핀치 이동 데드존 |
+| `HAND_SENS` | 26 | 핀치 이동 감도 |
+| `DX_DEAD_ZONE` | 0.002 | 핀치 이동 데드존 |
 | `ZOOM_SENS` | 2.2 | 줌 감도 |
 | `TAP_THRESHOLD` | 0.04 | 탭 인식 최소 아래쪽 이동량 |
-| `DB_TAP_WINDOW` | 9 frames (~0.3초) | 더블탭 인식 시간 창 |
+| `BACK_DBL_FRAMES` | 18 frames (~0.6초) | 엄지+중지 더블탭 뒤로가기 시간 창 |
+| `BACK_MOVE_THRESHOLD` | 0.04 | 더블탭 인식 최대 이동량 (초과 시 스크롤로 간주) |
 | `FIST_HOLD_FRAMES` | 15 frames (~0.5초) | 주먹 유지 필요 프레임 |
 | `INACTIVITY_FRAMES` | 1800 frames (~60초) | 자동 잠금 비활성 프레임 |
 | `FLASH_FRAMES` | 45 frames (~1.5초) | 잠금 토글 후 쿨다운 |
 | `BACK_ZONE_COS` | cos(20°) ≈ 0.940 | 손등 차단 구간 각도 임계값 |
-| `ROT_IMPULSE` | 0.45 | 회전 발동 시 임펄스 속도 |
+| `ROT_IMPULSE` | 0.15 | 회전 발동 시 임펄스 속도 (1회전 = 5카드, FRIC=0.97) |
 | `ROT_COOLDOWN` | 22 frames (~0.7초) | 회전 재발동 방지 쿨다운 |
 | `ROT_FIRE_ANGLE` | 75° (π×75/180) | 회전 누적 발동 각도 |
 
@@ -61,11 +62,14 @@
 
 ## 제스처 목록
 
-### 1. 엄지+중지 핀치 → 캐러셀 스크롤 / SchedulePage 세로 스크롤
+### 1. 엄지+중지 핀치 → 캐러셀 스크롤 / SchedulePage 세로 스크롤 / 더블탭 → 뒤로가기
 - **감지**: 엄지(4)↔중지(12) 3D 거리 / 손 크기 < `SCROLL_RATIO(0.33)` (진입) / `0.43` (유지, 히스테리시스)
 - **차단 조건**: `isLooseFist` · `isIndexOnly` · `isHandBack` · `backZoneMask` (손등 ±20°)
 - **Carousel**: 손목 X 이동량 × `HAND_SENS(26)` → `handState.dx`, 해제 시 `snap = true` → 스냅
 - **SchedulePage**: `pinchMidY` 프레임 간 델타 × `H × 1.75` → `.sch-list` scrollTop 직접 조작
+- **뒤로가기**: 핀치 2회 빠르게 탭(release → release 간격 `BACK_DBL_FRAMES(18프레임, ~0.6초)` 이내) → `handState.back = true`
+  - 스크롤 이동량이 `BACK_MOVE_THRESHOLD(0.04)` 미만일 때만 탭으로 인식 (스크롤과 더블탭 구분)
+  - 핀치 시작 시 이동량 누적(`pinchMoveAccum`), 해제 시 초기화
 - **우선순위**: 양손 줌 핀치 > 스크롤 핀치
 
 ### 2. 양손 엄지+검지 핀치 → 줌
@@ -75,14 +79,14 @@
 - **범위**: 0.5 ~ `(window.innerWidth/2) / 530` (화면 폭 기반 최대)
 - **차단 조건**: 스크롤 핀치 활성 중 → 줌 비활성
 
-### 3. 엄지+검지 단일 핀치 → 캘린더 날짜 선택 / 더블탭 → 뒤로가기
+### 3. 엄지+검지 단일 핀치 → 캘린더 날짜 선택
 - **차단 조건**: `isLooseFist` · `isIndexOnly` · `backZoneMask`
-- **감지**: 단일 손의 엄지(4)↔검지(8) 거리 / 손 크기 < `BACK_RATIO(0.25)` (스크롤·줌 비활성 시)
+- **감지**: 단일 손의 엄지(4)↔검지(8) 거리 / 손 크기 < `INDEX_PINCH_RATIO(0.25)` (스크롤·줌 비활성 시)
 - **날짜 선택**: 핀치 활성 상태(`indexPinchActive`)에서 `indexPinchMidX/Y` 기준 `[data-day]` 셀 hit-test
   - 핀치 rising edge 시 해당 날짜 선택, 유지 이동 시 hover 하이라이트 추적
   - CalendarView(overlay) 및 CalendarPage(`/motion/3`) 모두 적용
-- **뒤로가기**: `DB_TAP_WINDOW(9프레임)` 내 2번 탭 → `handState.back = true`
 - **조건**: 줌 핀치·스크롤 핀치 비활성일 때만 인식
+- ⚠️ **뒤로가기 역할 제거됨** (엄지+중지 더블탭으로 이전)
 
 ### 4. 검지 단독 탭 → 카드 클릭
 - **감지**: 검지(8)만 펴고 나머지 접힌 상태 (`isIndexOnly`) + 스크롤 핀치 없음
@@ -93,6 +97,7 @@
 
 ### 5. 단일 손 엄지+검지+중지 3핀치 → 좌우 dismiss
 - **감지**: 엄지(4)↔검지(8) AND 엄지(4)↔중지(12) 모두 3D 거리 / 손 크기 < `TRI_PINCH_RATIO(0.28)`
+- **차단 조건**: `isFistClosed(lm)` — 주먹 상태에서는 3핀치 비활성
 - **방향 규칙**:
   - 사용자 **오른손** (MediaPipe `'Left'`) → 오른쪽으로 밀어 dismiss
   - 사용자 **왼손** (MediaPipe `'Right'`) → 왼쪽으로 밀어 dismiss
@@ -103,7 +108,7 @@
 
 ### 6. 손 Roll 회전 → 연속 스크롤
 - **감지**: 검지MCP(5) → 소지MCP(17) 벡터 기울기 누적 변화량 > `ROT_FIRE_ANGLE(75°)`
-- **방향**: 오른손(MediaPipe 'Left') 회전 → `rotDx = +ROT_IMPULSE(0.45)` / 왼손 → `−0.45`
+- **방향**: 오른손(MediaPipe 'Left') 회전 → `rotDx = +ROT_IMPULSE(0.15)` / 왼손 → `−0.15`
 - **조건**: 손바닥이 카메라를 향한 상태(`isPalmFacing`)에서 시작한 회전만 허용
 - **차단**: 스크롤 핀치 활성 중 또는 마우스/터치 드래그 중 차단
 - **쿨다운**: 발동 후 `ROT_COOLDOWN(22프레임)` 동안 재발동 없음
@@ -173,4 +178,4 @@ detect(ts) 매 프레임 (30fps 캡)
 
 ---
 
-**Last Updated**: 2026-06-08 (잠금 시스템 메인 페이지 전용으로 제한, indexPinchColor 추가)
+**Last Updated**: 2026-06-08 (ROT_IMPULSE 0.45→0.15 (1회전=5카드); 3핀치 주먹 상태 차단 추가)

@@ -1,6 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { processFile, ACCEPT, EXT_LABEL } from '../utils/fileProcessor'
+import handState from '../utils/handState'
 import 'highlight.js/styles/atom-one-dark.css'
+
+// 사이드바: 화면 25% 좌측
+const SIDEBAR_X = 0.27
+const DROP_X    = 0.30
 
 function FileContent({ file }) {
   if (file.type === 'image') {
@@ -41,13 +46,81 @@ export default function FileViewerCore() {
   const [activeIdx, setActiveIdx] = useState(0)
   const [dragging,  setDragging]  = useState(false)
   const [loading,   setLoading]   = useState(false)
-  const inputRef = useRef(null)
-  const urlsRef  = useRef([])
+
+  // 핀치 드래그 상태
+  const [pinchDragging,  setPinchDragging]  = useState(null)   // 드래그 중인 파일 index
+  const [pinchDropReady, setPinchDropReady] = useState(false)   // 메인 영역 위에 있는지
+  const [pinchDragPos,   setPinchDragPos]   = useState({ x: 0, y: 0 })
+
+  const inputRef         = useRef(null)
+  const urlsRef          = useRef([])
+  const fileListRef      = useRef(null)
+  const pinchDraggingRef = useRef(null)
+  const prevPinchRef     = useRef(false)
+  const dropReadyRef     = useRef(false)
+  const filesRef         = useRef(files)
+  filesRef.current = files
 
   // 컴포넌트 언마운트 시 ObjectURL 해제
   useEffect(() => {
     const urls = urlsRef.current
     return () => urls.forEach(u => URL.revokeObjectURL(u))
+  }, [])
+
+  // 엄지+검지 핀치 드래그: 사이드바 파일 → 메인 영역에 드롭하여 열기
+  useEffect(() => {
+    let rafId
+    function poll() {
+      const px     = handState.indexPinchMidX
+      const py     = handState.indexPinchMidY
+      const active = handState.indexPinchActive
+
+      if (active) {
+        // 사이드바 영역에서 파일 잡기
+        if (pinchDraggingRef.current === null && px < SIDEBAR_X && filesRef.current.length > 0) {
+          const items = fileListRef.current?.querySelectorAll('.fv-file-item')
+          if (items) {
+            for (let i = 0; i < items.length; i++) {
+              const rect = items[i].getBoundingClientRect()
+              const topY = rect.top / window.innerHeight
+              const botY = rect.bottom / window.innerHeight
+              if (py >= topY - 0.01 && py <= botY + 0.01) {
+                pinchDraggingRef.current = i
+                setPinchDragging(i)
+                break
+              }
+            }
+          }
+        }
+
+        if (pinchDraggingRef.current !== null) {
+          const inDrop = px > DROP_X
+          if (inDrop !== dropReadyRef.current) {
+            dropReadyRef.current = inDrop
+            setPinchDropReady(inDrop)
+          }
+          setPinchDragPos({ x: px * window.innerWidth, y: py * window.innerHeight })
+        }
+        prevPinchRef.current = true
+
+      } else {
+        // 핀치 해제 → 드롭
+        if (prevPinchRef.current && pinchDraggingRef.current !== null) {
+          if (dropReadyRef.current) {
+            setActiveIdx(pinchDraggingRef.current)
+          }
+          pinchDraggingRef.current = null
+          dropReadyRef.current     = false
+          setPinchDragging(null)
+          setPinchDropReady(false)
+        }
+        prevPinchRef.current = false
+      }
+
+      rafId = requestAnimationFrame(poll)
+    }
+    rafId = requestAnimationFrame(poll)
+    return () => cancelAnimationFrame(rafId)
   }, [])
 
   const handleFiles = useCallback(async (fileList) => {
@@ -110,11 +183,15 @@ export default function FileViewerCore() {
         />
 
         {files.length > 0 && (
-          <div className="fv-file-list">
+          <div className="fv-file-list" ref={fileListRef}>
             {files.map((f, i) => (
               <div
                 key={i}
-                className={`fv-file-item${i === activeIdx ? ' fv-file-item--active' : ''}`}
+                className={[
+                  'fv-file-item',
+                  i === activeIdx      ? 'fv-file-item--active'         : '',
+                  i === pinchDragging  ? 'fv-file-item--pinch-dragging' : '',
+                ].filter(Boolean).join(' ')}
                 onClick={() => setActiveIdx(i)}
               >
                 <span className="fv-file-tag">{EXT_LABEL[f.ext] ?? f.ext.toUpperCase()}</span>
@@ -129,7 +206,7 @@ export default function FileViewerCore() {
       </div>
 
       {/* ── 메인 콘텐츠 ── */}
-      <div className="fv-main">
+      <div className={`fv-main${pinchDropReady ? ' fv-main--drop' : ''}`}>
         {!active
           ? (
             <div className="fv-empty-state">
@@ -150,6 +227,21 @@ export default function FileViewerCore() {
           )
         }
       </div>
+
+      {/* ── 핀치 드래그 고스트 ── */}
+      {pinchDragging !== null && files[pinchDragging] && (
+        <div
+          className={`fv-pinch-ghost${pinchDropReady ? ' fv-pinch-ghost--drop' : ''}`}
+          style={{ left: pinchDragPos.x, top: pinchDragPos.y }}
+        >
+          <span className="fv-pinch-ghost-tag">
+            {EXT_LABEL[files[pinchDragging].ext] ?? files[pinchDragging].ext.toUpperCase()}
+          </span>
+          <span className="fv-pinch-ghost-name">
+            {files[pinchDragging].name.replace(/\.[^.]+$/, '')}
+          </span>
+        </div>
+      )}
     </>
   )
 }
