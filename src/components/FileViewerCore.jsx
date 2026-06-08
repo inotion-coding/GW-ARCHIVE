@@ -3,53 +3,104 @@ import { processFile, ACCEPT, EXT_LABEL } from '../utils/fileProcessor'
 import handState from '../utils/handState'
 import 'highlight.js/styles/atom-one-dark.css'
 import * as pdfjsLib from 'pdfjs-dist'
-import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.min.mjs',
+  import.meta.url
+).href
 
 // ── PDF 페이지 단위 렌더러
-const PdfPage = memo(function PdfPage({ pdfDoc, pageNum }) {
+const PdfPage = memo(function PdfPage({ pdfDoc, pageNum, fitScale }) {
   const canvasRef = useRef(null)
 
   useEffect(() => {
-    if (!pdfDoc || !canvasRef.current) return
+    if (!pdfDoc || !canvasRef.current || !fitScale) return
     let task = null
     ;(async () => {
       const page     = await pdfDoc.getPage(pageNum)
-      const viewport = page.getViewport({ scale: 2 })
+      // fitScale 기준으로 렌더, 픽셀 선명도를 위해 1.5배 오버샘플
+      const viewport = page.getViewport({ scale: fitScale * 1.5 })
       const canvas   = canvasRef.current
       if (!canvas) return
-      canvas.width   = viewport.width
-      canvas.height  = viewport.height
+      canvas.width        = viewport.width
+      canvas.height       = viewport.height
+      canvas.style.width  = `${viewport.width / 1.5}px`
+      canvas.style.height = `${viewport.height / 1.5}px`
       task = page.render({ canvasContext: canvas.getContext('2d'), viewport })
       await task.promise
     })()
     return () => { task?.cancel?.() }
-  }, [pdfDoc, pageNum])
+  }, [pdfDoc, pageNum, fitScale])
 
   return <canvas ref={canvasRef} className="fv-pdf-canvas" />
 })
 
 function PdfViewer({ url }) {
-  const [numPages, setNumPages] = useState(0)
-  const [pdfDoc,   setPdfDoc]   = useState(null)
+  const [numPages,  setNumPages]  = useState(0)
+  const [pdfDoc,    setPdfDoc]    = useState(null)
+  const [fitScale,  setFitScale]  = useState(null)
+  const containerRef  = useRef(null)
+  const lastPinchYRef = useRef(null)
+  const vp1Ref        = useRef(null)
 
+  // PDF 로드: 페이지 치수만 확보, fitScale은 pdfDoc 세팅 후 별도 계산
   useEffect(() => {
     let cancelled = false
+    setFitScale(null); setPdfDoc(null); setNumPages(0)
     ;(async () => {
-      const doc = await pdfjsLib.getDocument(url).promise
+      const doc  = await pdfjsLib.getDocument({ url }).promise
       if (cancelled) return
+      const page = await doc.getPage(1)
+      vp1Ref.current = page.getViewport({ scale: 1 })
       setPdfDoc(doc)
       setNumPages(doc.numPages)
     })()
     return () => { cancelled = true }
   }, [url])
 
+  // pdfDoc 세팅 후 → DOM이 렌더된 뒤 컨테이너 크기로 fitScale 계산
+  useEffect(() => {
+    if (!pdfDoc || !vp1Ref.current) return
+    const vp1 = vp1Ref.current
+    const el  = containerRef.current
+    const availH = (el?.clientHeight ?? (window.innerHeight - 192)) - 16
+    const availW = (el?.clientWidth  ?? (window.innerWidth * 0.75 - 96)) - 16
+    setFitScale(Math.min(availH / vp1.height, availW / vp1.width))
+  }, [pdfDoc])
+
+  // URL 변경 시 스크롤 초기화
+  useEffect(() => {
+    if (containerRef.current) containerRef.current.scrollTop = 0
+  }, [url])
+
+  // 단일 핀치 스크롤 (줌은 FileViewerCore에서 통합 처리)
+  useEffect(() => {
+    let rafId
+    function poll() {
+      const active  = handState.indexPinchActive
+      const px      = handState.indexPinchMidX
+      const py      = handState.indexPinchMidY
+      const zooming = handState.bothZoomActive
+      if (!zooming && active && px > 0.30) {
+        if (lastPinchYRef.current !== null) {
+          const dy = py - lastPinchYRef.current
+          if (containerRef.current) containerRef.current.scrollTop += dy * window.innerHeight * 2.2
+        }
+        lastPinchYRef.current = py
+      } else {
+        lastPinchYRef.current = null
+      }
+      rafId = requestAnimationFrame(poll)
+    }
+    rafId = requestAnimationFrame(poll)
+    return () => cancelAnimationFrame(rafId)
+  }, [])
+
   return (
-    <div className="fv-pdf-pages">
-      {numPages === 0
+    <div ref={containerRef} className="fv-pdf-pages">
+      {!fitScale || numPages === 0
         ? <span className="fv-pdf-loading">Loading…</span>
         : Array.from({ length: numPages }, (_, i) => (
-            <PdfPage key={i} pdfDoc={pdfDoc} pageNum={i + 1} />
+            <PdfPage key={i} pdfDoc={pdfDoc} pageNum={i + 1} fitScale={fitScale} />
           ))
       }
     </div>
@@ -105,6 +156,11 @@ export default function FileViewerCore() {
   const [pinchDropReady, setPinchDropReady] = useState(false)   // 메인 영역 위에 있는지
   const [pinchDragPos,   setPinchDragPos]   = useState({ x: 0, y: 0 })
 
+  const [contentZoom, setContentZoom] = useState(1)
+  const contentZoomRef = useRef(1)
+  const activeIdxRef   = useRef(activeIdx)
+  activeIdxRef.current = activeIdx
+
   const inputRef         = useRef(null)
   const urlsRef          = useRef([])
   const fileListRef      = useRef(null)
@@ -113,6 +169,28 @@ export default function FileViewerCore() {
   const dropReadyRef     = useRef(false)
   const filesRef         = useRef(files)
   filesRef.current = files
+
+  // 파일 전환 시 줌 초기화
+  useEffect(() => {
+    setContentZoom(1)
+    contentZoomRef.current = 1
+  }, [activeIdx])
+
+  // 모든 파일 타입 줌 RAF (PDF 포함)
+  useEffect(() => {
+    let rafId
+    function poll() {
+      if (handState.zoomDelta !== 0 && handState.bothZoomActive) {
+        const next = Math.max(1, Math.min(4, contentZoomRef.current + handState.zoomDelta * 3))
+        contentZoomRef.current = next
+        setContentZoom(next)
+        handState.zoomDelta = 0
+      }
+      rafId = requestAnimationFrame(poll)
+    }
+    rafId = requestAnimationFrame(poll)
+    return () => cancelAnimationFrame(rafId)
+  }, [])
 
   // 컴포넌트 언마운트 시 ObjectURL 해제
   useEffect(() => {
@@ -274,7 +352,17 @@ export default function FileViewerCore() {
                 <span className="fv-content-name">{active.name}</span>
               </div>
               <div className="fv-content-body">
-                <FileContent file={active} />
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  width: '100%',
+                  height: '100%',
+                  transform: `scale(${contentZoom})`,
+                  transformOrigin: active.type === 'pdf' ? 'top center' : 'center center',
+                  transition: 'transform 0.05s',
+                }}>
+                  <FileContent file={active} />
+                </div>
               </div>
             </>
           )
