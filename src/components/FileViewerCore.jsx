@@ -1,7 +1,60 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, memo } from 'react'
 import { processFile, ACCEPT, EXT_LABEL } from '../utils/fileProcessor'
 import handState from '../utils/handState'
 import 'highlight.js/styles/atom-one-dark.css'
+
+// ── PDF 페이지 단위 렌더러
+const PdfPage = memo(function PdfPage({ pdfDoc, pageNum }) {
+  const canvasRef = useRef(null)
+
+  useEffect(() => {
+    if (!pdfDoc) return
+    let cancelled = false
+    ;(async () => {
+      const page     = await pdfDoc.getPage(pageNum)
+      if (cancelled) return
+      const viewport = page.getViewport({ scale: 2 })
+      const canvas   = canvasRef.current
+      if (!canvas) return
+      canvas.width   = viewport.width
+      canvas.height  = viewport.height
+      page.render({ canvasContext: canvas.getContext('2d'), viewport })
+    })()
+    return () => { cancelled = true }
+  }, [pdfDoc, pageNum])
+
+  return <canvas ref={canvasRef} className="fv-pdf-canvas" />
+})
+
+function PdfViewer({ url }) {
+  const [numPages, setNumPages] = useState(0)
+  const [pdfDoc,   setPdfDoc]   = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const pdfjs = await import('pdfjs-dist')
+      pdfjs.GlobalWorkerOptions.workerSrc =
+        `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`
+      const doc = await pdfjs.getDocument(url).promise
+      if (cancelled) return
+      setPdfDoc(doc)
+      setNumPages(doc.numPages)
+    })()
+    return () => { cancelled = true }
+  }, [url])
+
+  return (
+    <div className="fv-pdf-pages">
+      {numPages === 0
+        ? <span className="fv-pdf-loading">Loading…</span>
+        : Array.from({ length: numPages }, (_, i) => (
+            <PdfPage key={i} pdfDoc={pdfDoc} pageNum={i + 1} />
+          ))
+      }
+    </div>
+  )
+}
 
 // 사이드바: 화면 25% 좌측
 const SIDEBAR_X = 0.27
@@ -31,7 +84,7 @@ function FileContent({ file }) {
     )
   }
   if (file.type === 'pdf') {
-    return <iframe src={file.url} className="fv-media-pdf" title={file.name} />
+    return <PdfViewer url={file.url} />
   }
   return (
     <div

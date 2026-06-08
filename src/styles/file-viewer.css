@@ -367,11 +367,34 @@
   max-width: 480px;
 }
 
-.fv-media-pdf {
+/* ── PDF 캔버스 렌더링 ── */
+.fv-pdf-pages {
   flex: 1;
-  width: 100%;
-  height: 100%;
-  border: none;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 0;
+  scrollbar-width: none;
+}
+.fv-pdf-pages::-webkit-scrollbar { display: none; }
+
+.fv-pdf-canvas {
+  max-width: 100%;
+  display: block;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.12);
+}
+
+.fv-pdf-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.38;
 }
 
 /* ── 핀치 드래그 ── */
