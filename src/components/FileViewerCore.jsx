@@ -34,7 +34,7 @@ const PdfPage = memo(function PdfPage({ pdfDoc, pageNum, fitScale }) {
   return <canvas ref={canvasRef} className="fv-pdf-canvas" />
 })
 
-function PdfViewer({ url }) {
+function PdfViewer({ url, zoom = 1 }) {
   const [numPages,  setNumPages]  = useState(0)
   const [pdfDoc,    setPdfDoc]    = useState(null)
   const [fitScale,  setFitScale]  = useState(null)
@@ -99,9 +99,11 @@ function PdfViewer({ url }) {
     <div ref={containerRef} className="fv-pdf-pages">
       {!fitScale || numPages === 0
         ? <span className="fv-pdf-loading">Loading…</span>
-        : Array.from({ length: numPages }, (_, i) => (
-            <PdfPage key={i} pdfDoc={pdfDoc} pageNum={i + 1} fitScale={fitScale} />
-          ))
+        : <div style={{ zoom }}>
+            {Array.from({ length: numPages }, (_, i) => (
+              <PdfPage key={i} pdfDoc={pdfDoc} pageNum={i + 1} fitScale={fitScale} />
+            ))}
+          </div>
       }
     </div>
   )
@@ -111,7 +113,7 @@ function PdfViewer({ url }) {
 const SIDEBAR_X = 0.27
 const DROP_X    = 0.30
 
-function FileContent({ file }) {
+function FileContent({ file, zoom = 1 }) {
   if (file.type === 'image') {
     return <div className="fv-media-center"><img src={file.url} alt={file.name} className="fv-media-img" /></div>
   }
@@ -135,7 +137,7 @@ function FileContent({ file }) {
     )
   }
   if (file.type === 'pdf') {
-    return <PdfViewer url={file.url} />
+    return <PdfViewer url={file.url} zoom={zoom} />
   }
   return (
     <div
@@ -157,9 +159,11 @@ export default function FileViewerCore() {
   const [pinchDragPos,   setPinchDragPos]   = useState({ x: 0, y: 0 })
 
   const [contentZoom, setContentZoom] = useState(1)
-  const contentZoomRef = useRef(1)
-  const activeIdxRef   = useRef(activeIdx)
-  activeIdxRef.current = activeIdx
+  const contentZoomRef   = useRef(1)
+  const activeIdxRef     = useRef(activeIdx)
+  activeIdxRef.current   = activeIdx
+  const renderedScrollRef = useRef(null)
+  const renderedLastYRef  = useRef(null)
 
   const inputRef         = useRef(null)
   const urlsRef          = useRef([])
@@ -170,11 +174,39 @@ export default function FileViewerCore() {
   const filesRef         = useRef(files)
   filesRef.current = files
 
-  // 파일 전환 시 줌 초기화
+  // 파일 전환 시 줌·스크롤 초기화
   useEffect(() => {
     setContentZoom(1)
     contentZoomRef.current = 1
+    if (renderedScrollRef.current) renderedScrollRef.current.scrollTop = 0
+    renderedLastYRef.current = null
   }, [activeIdx])
+
+  // 텍스트·문서 파일 핀치 스크롤 RAF (이미지·오디오·비디오·PDF 제외)
+  useEffect(() => {
+    const SCROLL_TYPES = new Set(['image', 'video', 'audio', 'pdf'])
+    let rafId
+    function poll() {
+      const file    = filesRef.current[activeIdxRef.current]
+      const isText  = file && !SCROLL_TYPES.has(file.type)
+      const active  = handState.indexPinchActive
+      const px      = handState.indexPinchMidX
+      const py      = handState.indexPinchMidY
+      const zooming = handState.bothZoomActive
+      if (isText && !zooming && active && px > 0.30) {
+        const el = renderedScrollRef.current
+        if (el && renderedLastYRef.current !== null) {
+          el.scrollTop += (py - renderedLastYRef.current) * window.innerHeight * 2.2
+        }
+        renderedLastYRef.current = py
+      } else {
+        renderedLastYRef.current = null
+      }
+      rafId = requestAnimationFrame(poll)
+    }
+    rafId = requestAnimationFrame(poll)
+    return () => cancelAnimationFrame(rafId)
+  }, [])
 
   // 모든 파일 타입 줌 RAF (PDF 포함)
   useEffect(() => {
@@ -352,17 +384,35 @@ export default function FileViewerCore() {
                 <span className="fv-content-name">{active.name}</span>
               </div>
               <div className="fv-content-body">
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  width: '100%',
-                  height: '100%',
-                  transform: `scale(${contentZoom})`,
-                  transformOrigin: active.type === 'pdf' ? 'top center' : 'center center',
-                  transition: 'transform 0.05s',
-                }}>
-                  <FileContent file={active} />
-                </div>
+                {/* 미디어(이미지·영상·오디오): transform scale로 시각적 확대 */}
+                {['image', 'video', 'audio'].includes(active.type)
+                  ? (
+                    <div style={{
+                      display: 'flex', flexDirection: 'column',
+                      width: '100%', height: '100%',
+                      transform: `scale(${contentZoom})`,
+                      transformOrigin: 'center center',
+                      transition: 'transform 0.05s',
+                    }}>
+                      <FileContent file={active} zoom={contentZoom} />
+                    </div>
+                  )
+                  /* 텍스트·문서: zoom 속성을 스크롤 컨테이너 내부에 적용 → 확대 시 스크롤 범위 증가 */
+                  : !['pdf'].includes(active.type)
+                    ? (
+                      <div ref={renderedScrollRef} style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+                        <div style={{ zoom: contentZoom }}>
+                          <FileContent file={active} zoom={contentZoom} />
+                        </div>
+                      </div>
+                    )
+                  /* PDF: zoom은 PdfViewer 내부 스크롤 컨테이너 안에서 처리 */
+                    : (
+                      <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
+                        <FileContent file={active} zoom={contentZoom} />
+                      </div>
+                    )
+                }
               </div>
             </>
           )
