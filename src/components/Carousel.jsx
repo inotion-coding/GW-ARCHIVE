@@ -8,10 +8,9 @@ const N     = CARDS.length
 const SLOTS = 11
 const HALF  = 5
 
-const EASE      = 0.10
-const FRIC      = 0.97
-const SENS      = 0.005
-const ZOOM_EASE = 0.15
+const EASE = 0.10
+const FRIC = 0.97
+const SENS = 0.005
 
 // 페이지 이동 후 복귀 시 마지막 위치 유지
 let savedCarouselOffset = 0
@@ -57,8 +56,8 @@ export default function Carousel() {
 
     let offset = savedCarouselOffset, target = savedCarouselOffset, vel = 0
     let drag = false, lastX = 0
-    let zoomLevel  = 1
-    let zoomTarget = 1
+    let zoomLevel = 1
+    let zoomVel   = 0
     let handVel = 0
     let wasHandPinching = false
     let dismissY          = 0     // 씬 수직 오프셋 — easing으로 추적 (px)
@@ -195,11 +194,15 @@ export default function Carousel() {
       }
 
       if (handState.zoomDelta !== 0) {
-        const maxZoom = W / 2 / 530
-        zoomTarget = Math.max(0.5, Math.min(maxZoom, zoomTarget + handState.zoomDelta))
+        zoomVel += handState.zoomDelta * 0.40
         handState.zoomDelta = 0
       }
-      zoomLevel += (zoomTarget - zoomLevel) * ZOOM_EASE
+      if (zoomVel !== 0) {
+        const maxZoom = W / 2 / 530
+        zoomLevel = Math.max(0.5, Math.min(maxZoom, zoomLevel + zoomVel))
+        zoomVel *= 0.80
+        if (Math.abs(zoomVel) < 0.0002) zoomVel = 0
+      }
 
       // ── Dismiss / Restore (상·하·좌·우 4방향) ──
       const DISMISS_THRESH   = H * 0.30

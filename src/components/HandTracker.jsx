@@ -230,8 +230,18 @@ export default function HandTracker() {
     let rafId          = null
     let workerReady    = false
     let workerBusy     = false
-    let drawState = null   // 제스처 시각화 상태 (handModes, pinchDots 등)
-    let curLms    = null   // 최신 검출 랜드마크
+    let useVideoFrame  = false  // MediaStreamTrackProcessor 파이프라인 활성화 여부
+    let videoStream    = null   // 워커 준비 전 스트림 보관용
+    let drawState   = null
+    let curLms      = null
+    let prevLms     = null
+    let lmsTime     = 0
+    let lmsInterval = 50
+    // 보간 프레임마다 랜드마크 객체를 새로 생성하지 않도록 미리 할당
+    const lerpBuf = [
+      Array.from({length: 21}, () => ({x: 0, y: 0, z: 0})),
+      Array.from({length: 21}, () => ({x: 0, y: 0, z: 0})),
+    ]
 
     let lastX              = null
     let wasPinching        = false
@@ -275,6 +285,10 @@ export default function HandTracker() {
     // Worker에서 추론 결과가 도착하면 호출 — 메인 스레드에서 실행되지만 RAF 밖에서 비동기 실행
     function onWorkerResult({ landmarks: lms, handedness }) {
       workerBusy = false
+      prevLms = curLms
+      const t = performance.now()
+      if (lmsTime > 0) lmsInterval = Math.max(16, t - lmsTime)
+      lmsTime = t
       curLms    = lms
       drawState = null
 
@@ -631,6 +645,7 @@ export default function HandTracker() {
       if (e.data.type === 'READY') {
         workerReady = true
         console.log('[HandTracker] Worker ready')
+        startVideoFramePipeline()  // 이미 스트림이 있으면 즉시 시작
       } else if (e.data.type === 'RESULT') {
         onWorkerResult(e.data)
       } else if (e.data.type === 'ERROR') {
@@ -642,6 +657,20 @@ export default function HandTracker() {
     worker.onerror = (err) => {
       console.error('[HandTracker] Worker error:', err.message, err)
       workerBusy = false
+    }
+
+    // VideoFrame 파이프라인 시작 — 워커 준비 후 카메라 스트림을 워커에 직접 전달
+    // 워커가 RAF와 무관하게 최신 프레임을 자율적으로 읽어 추론 → 메인→워커 프레임 전달 지연 제거
+    function startVideoFramePipeline() {
+      if (!videoStream || !workerReady || useVideoFrame) return
+      if (typeof MediaStreamTrackProcessor === 'undefined') return
+      const track = videoStream.getVideoTracks()[0]
+      if (!track) return
+      // maxBufferSize:1 — 추론 중 쌓인 프레임은 자동 폐기, reader.read()는 항상 최신 프레임 반환
+      const processor = new MediaStreamTrackProcessor({ track, maxBufferSize: 1 })
+      worker.postMessage({ type: 'START_STREAM', readable: processor.readable }, [processor.readable])
+      useVideoFrame = true
+      console.log('[HandTracker] VideoFrame 파이프라인 시작')
     }
 
     // detect(): 60fps 캔버스 렌더링 + workerBusy 자연 속도 제한
@@ -658,19 +687,35 @@ export default function HandTracker() {
         ctx.clearRect(0, 0, W, H)
         if (drawState && curLms) {
           const isDark = document.documentElement.classList.contains('dark')
-          drawFrame(ctx, W, H, isDark, curLms, drawState)
+          let drawLms = curLms
+          if (prevLms && prevLms.length === curLms.length && curLms.length > 0) {
+            // +0.5 기저: 검출 파이프라인 지연(~50ms) 보상 — 항상 이전→현재 속도의 50%+ 앞을 예측
+            const extraT = Math.min(0.9, (performance.now() - lmsTime) / lmsInterval + 0.5)
+            const n = curLms.length
+            for (let hi = 0; hi < n; hi++) {
+              const cl = curLms[hi], pl = prevLms[hi], buf = lerpBuf[hi]
+              for (let i = 0; i < 21; i++) {
+                buf[i].x = cl[i].x + (cl[i].x - pl[i].x) * extraT
+                buf[i].y = cl[i].y + (cl[i].y - pl[i].y) * extraT
+                buf[i].z = cl[i].z + (cl[i].z - pl[i].z) * extraT
+              }
+            }
+            drawLms = n === 1 ? [lerpBuf[0]] : lerpBuf
+          }
+          drawFrame(ctx, W, H, isDark, drawLms, drawState)
         }
       }
 
-      const video = videoRef.current
-      if (!video || video.readyState < 2 || !workerReady || workerBusy) return
-
-      // 현재 영상 프레임 캡처 (동기, < 0.5ms)
-      captureCtx.drawImage(video, 0, 0, 320, 240)
-      const bitmap = captureCanvas.transferToImageBitmap()
-
-      workerBusy = true
-      worker.postMessage({ type: 'DETECT', bitmap, timestamp: ts }, [bitmap])
+      // VideoFrame 파이프라인 활성화 시 워커가 자율 처리 — 메인 스레드 캡처 불필요
+      if (!useVideoFrame) {
+        const video = videoRef.current
+        if (video && video.readyState >= 2 && workerReady && !workerBusy) {
+          captureCtx.drawImage(video, 0, 0, 320, 240)
+          const bitmap = captureCanvas.transferToImageBitmap()
+          workerBusy = true
+          worker.postMessage({ type: 'DETECT', bitmap, timestamp: ts }, [bitmap])
+        }
+      }
     }
 
     async function init() {
@@ -687,6 +732,8 @@ export default function HandTracker() {
         })
         if (!videoRef.current) return
         await videoRef.current.play()
+        videoStream = stream
+        startVideoFramePipeline()  // 워커가 이미 준비됐으면 즉시, 아니면 READY 수신 시 시작
         rafId = requestAnimationFrame(detect)
       } catch (err) {
         console.warn('[HandTracker] 카메라 초기화 실패:', err)

@@ -126,6 +126,18 @@
 
 ---
 
+## 검출 파이프라인 아키텍처
+
+| 항목 | 값 / 방식 |
+|---|---|
+| 검출 방식 | `MediaStreamTrackProcessor` + `VideoFrame` — 워커가 카메라 스트림 직접 pull |
+| 버퍼 크기 | `maxBufferSize: 1` — 추론 중 쌓인 프레임 자동 폐기, 항상 최신 프레임 처리 |
+| 폴백 | `MediaStreamTrackProcessor` 미지원 시 `ImageBitmap` postMessage 방식 사용 |
+| 렌더링 | RAF 60fps 독립 — 외삽(extrapolation)으로 검출 지연 보상, `lerpBuf` 프리할당 |
+| 입력 해상도 | 320 × 240 (OffscreenCanvas, 폴백 경로만 해당) |
+
+---
+
 ## 손등 차단 구간 (Dead Zone)
 
 손등이 완벽하게 카메라를 향할 때 기준 **±20°** 이내는 **모든 제스처 비활성**.
