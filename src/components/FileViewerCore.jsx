@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useLayoutEffect, memo } from 'react'
+import { useState, useRef, useCallback, useEffect, useLayoutEffect, memo, forwardRef, useImperativeHandle } from 'react'
 import { processFile, ACCEPT, EXT_LABEL } from '../utils/fileProcessor'
 import handState from '../utils/handState'
 import 'highlight.js/styles/atom-one-dark.css'
@@ -8,16 +8,14 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url
 ).href
 
-// ── PDF 페이지 단위 렌더러
+// ── PDF 페이지 단위 렌더러 (memo: fitScale/pdfDoc 변경 시에만 재렌더)
 const PdfPage = memo(function PdfPage({ pdfDoc, pageNum, fitScale }) {
   const canvasRef = useRef(null)
-
   useEffect(() => {
     if (!pdfDoc || !canvasRef.current || !fitScale) return
     let task = null
     ;(async () => {
       const page     = await pdfDoc.getPage(pageNum)
-      // fitScale 기준으로 렌더, 픽셀 선명도를 위해 1.5배 오버샘플
       const viewport = page.getViewport({ scale: fitScale * 1.5 })
       const canvas   = canvasRef.current
       if (!canvas) return
@@ -30,19 +28,21 @@ const PdfPage = memo(function PdfPage({ pdfDoc, pageNum, fitScale }) {
     })()
     return () => { task?.cancel?.() }
   }, [pdfDoc, pageNum, fitScale])
-
   return <canvas ref={canvasRef} className="fv-pdf-canvas" />
 })
 
-function PdfViewer({ url, zoom = 1 }) {
+// ── PDF 뷰어: forwardRef로 줌·스크롤을 명령형으로 제어 (zoom prop 없음 → React 리렌더 없음)
+const PdfViewer = forwardRef(function PdfViewer({ url }, ref) {
   const [numPages,  setNumPages]  = useState(0)
   const [pdfDoc,    setPdfDoc]    = useState(null)
   const [fitScale,  setFitScale]  = useState(null)
-  const containerRef  = useRef(null)
-  const lastPinchYRef = useRef(null)
-  const vp1Ref        = useRef(null)
+  const containerRef = useRef(null)
+  const innerRef     = useRef(null)
+  const spacerRef    = useRef(null)
+  const vp1Ref       = useRef(null)
+  const totalHRef    = useRef(0)
 
-  // PDF 로드: 페이지 치수만 확보, fitScale은 pdfDoc 세팅 후 별도 계산
+  // PDF 로드
   useEffect(() => {
     let cancelled = false
     setFitScale(null); setPdfDoc(null); setNumPages(0)
@@ -57,7 +57,7 @@ function PdfViewer({ url, zoom = 1 }) {
     return () => { cancelled = true }
   }, [url])
 
-  // pdfDoc 세팅 후 → DOM이 렌더된 뒤 컨테이너 크기로 fitScale 계산
+  // pdfDoc 세팅 후 컨테이너 크기로 fitScale 계산
   useEffect(() => {
     if (!pdfDoc || !vp1Ref.current) return
     const vp1 = vp1Ref.current
@@ -67,72 +67,56 @@ function PdfViewer({ url, zoom = 1 }) {
     setFitScale(Math.min(availH / vp1.height, availW / vp1.width))
   }, [pdfDoc])
 
-  // URL 변경 시 스크롤 초기화
   useEffect(() => {
     if (containerRef.current) containerRef.current.scrollTop = 0
   }, [url])
 
-  // 단일 핀치 스크롤 (줌은 FileViewerCore에서 통합 처리)
-  useEffect(() => {
-    let rafId
-    function poll() {
-      const viewerOpen  = handState.dismissed && handState.dismissDir === 'left'
-      const zooming     = handState.bothZoomActive
-      // 엄지+검지(indexPinch) 또는 엄지+중지(activePinch) 모두 지원
-      const useIndex    = handState.indexPinchActive
-      const useScroll   = !useIndex && handState.activePinch
-      const active      = useIndex || useScroll
-      const px          = useIndex ? handState.indexPinchMidX : handState.pinchMidX
-      const py          = useIndex ? handState.indexPinchMidY : handState.pinchMidY
-      if (viewerOpen && !zooming && active && px > 0.30) {
-        if (lastPinchYRef.current !== null) {
-          const dy = py - lastPinchYRef.current
-          if (containerRef.current) containerRef.current.scrollTop += dy * window.innerHeight * 2.2
-        }
-        lastPinchYRef.current = py
-      } else {
-        lastPinchYRef.current = null
-      }
-      rafId = requestAnimationFrame(poll)
-    }
-    rafId = requestAnimationFrame(poll)
-    return () => cancelAnimationFrame(rafId)
-  }, [])
-
-  // 스크롤 spacer 계산: transform이 레이아웃을 바꾸지 않으므로 직접 보정
-  const pageH  = vp1Ref.current && fitScale ? vp1Ref.current.height * fitScale : 0
+  // totalH를 렌더마다 ref에 동기화 (setZoom에서 사용)
+  const pageH = vp1Ref.current && fitScale ? vp1Ref.current.height * fitScale : 0
   const totalH = numPages > 0 && pageH > 0
-    ? numPages * pageH + (numPages - 1) * 8 + 16   // gap 8 × (n-1) + padding 8×2
+    ? numPages * pageH + (numPages - 1) * 8 + 16
     : 0
+  totalHRef.current = totalH
+
+  // 명령형 API: FileViewerCore의 단일 RAF에서 직접 호출
+  useImperativeHandle(ref, () => ({
+    setZoom(zoom) {
+      if (innerRef.current)
+        innerRef.current.style.transform = `scale(${zoom})`
+      if (spacerRef.current)
+        spacerRef.current.style.height = zoom > 1 && totalHRef.current > 0
+          ? `${totalHRef.current * (zoom - 1)}px` : '0px'
+    },
+    scrollBy(dy) {
+      if (containerRef.current) containerRef.current.scrollTop += dy
+    },
+  }), [])
 
   return (
     <div ref={containerRef} className="fv-pdf-pages">
       {!fitScale || numPages === 0
         ? <span className="fv-pdf-loading">Loading…</span>
         : <>
-            <div style={{
+            <div ref={innerRef} style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center',
               gap: '8px', padding: '8px 0',
-              transform: `scale(${zoom})`, transformOrigin: 'top center',
+              transform: 'scale(1)', transformOrigin: 'top center',
             }}>
               {Array.from({ length: numPages }, (_, i) => (
                 <PdfPage key={i} pdfDoc={pdfDoc} pageNum={i + 1} fitScale={fitScale} />
               ))}
             </div>
-            {zoom > 1 && totalH > 0 && (
-              <div style={{ height: `${totalH * (zoom - 1)}px` }} />
-            )}
+            <div ref={spacerRef} style={{ height: '0px' }} />
           </>
       }
     </div>
   )
-}
+})
 
-// 사이드바: 화면 25% 좌측
 const SIDEBAR_X = 0.27
 const DROP_X    = 0.30
 
-function FileContent({ file, zoom = 1 }) {
+function FileContent({ file, pdfRef }) {
   if (file.type === 'image') {
     return <div className="fv-media-center"><img src={file.url} alt={file.name} className="fv-media-img" /></div>
   }
@@ -156,7 +140,7 @@ function FileContent({ file, zoom = 1 }) {
     )
   }
   if (file.type === 'pdf') {
-    return <PdfViewer url={file.url} zoom={zoom} />
+    return <PdfViewer url={file.url} ref={pdfRef} />
   }
   return (
     <div
@@ -172,118 +156,142 @@ export default function FileViewerCore() {
   const [dragging,  setDragging]  = useState(false)
   const [loading,   setLoading]   = useState(false)
 
-  // 핀치 드래그 상태
-  const [pinchDragging,  setPinchDragging]  = useState(null)   // 드래그 중인 파일 index
-  const [pinchDropReady, setPinchDropReady] = useState(false)   // 메인 영역 위에 있는지
+  const [pinchDragging,  setPinchDragging]  = useState(null)
+  const [pinchDropReady, setPinchDropReady] = useState(false)
   const [pinchDragPos,   setPinchDragPos]   = useState({ x: 0, y: 0 })
 
-  const [contentZoom, setContentZoom] = useState(1)
-  const contentZoomRef   = useRef(1)
-  const activeIdxRef     = useRef(activeIdx)
-  activeIdxRef.current   = activeIdx
+  // ── 줌: state 제거 → ref + 직접 DOM 조작으로 리렌더 차단
+  const contentZoomRef    = useRef(1)
+  const mediaWrapperRef   = useRef(null)  // 이미지·영상·오디오 wrapper
+  const textInnerRef      = useRef(null)  // 텍스트 inner div
+  const textSpacerRef     = useRef(null)  // 텍스트 spacer div
+  const pdfViewerRef      = useRef(null)  // PdfViewer 명령형 ref
+  const textHRef          = useRef(0)     // 텍스트 자연 높이 (측정값)
+
+  const activeIdxRef      = useRef(activeIdx)
+  activeIdxRef.current    = activeIdx
   const renderedScrollRef = useRef(null)
   const renderedLastYRef  = useRef(null)
-  const textInnerRef      = useRef(null)
-  const [textH, setTextH] = useState(0)
+  const pdfLastYRef       = useRef(null)
 
-  const inputRef         = useRef(null)
-  const urlsRef          = useRef([])
-  const fileListRef      = useRef(null)
-  const pinchDraggingRef = useRef(null)
-  const prevPinchRef     = useRef(false)
-  const dropReadyRef     = useRef(false)
-  const filesRef         = useRef(files)
+  const inputRef          = useRef(null)
+  const urlsRef           = useRef([])
+  const fileListRef       = useRef(null)
+  const fileItemRectsRef  = useRef([])  // pinch drag: DOM 쿼리 캐시
+  const pinchDraggingRef  = useRef(null)
+  const prevPinchRef      = useRef(false)
+  const dropReadyRef      = useRef(false)
+  const filesRef          = useRef(files)
   filesRef.current = files
 
-  // 파일 전환 시 줌·스크롤 초기화
+  // ── 줌을 직접 DOM에 적용하는 함수
+  const applyZoom = useCallback((file, zoom) => {
+    if (!file) return
+    if (['image', 'video', 'audio'].includes(file.type)) {
+      if (mediaWrapperRef.current)
+        mediaWrapperRef.current.style.transform = `scale(${zoom})`
+    } else if (file.type !== 'pdf') {
+      if (textInnerRef.current)
+        textInnerRef.current.style.transform = `scale(${zoom})`
+      if (textSpacerRef.current)
+        textSpacerRef.current.style.height = zoom > 1 && textHRef.current > 0
+          ? `${textHRef.current * (zoom - 1)}px` : '0px'
+    } else {
+      pdfViewerRef.current?.setZoom(zoom)
+    }
+  }, [])
+
+  // ── 파일 전환 시 줌·스크롤 초기화
   useEffect(() => {
-    setContentZoom(1)
     contentZoomRef.current = 1
+    applyZoom(filesRef.current[activeIdx], 1)
     if (renderedScrollRef.current) renderedScrollRef.current.scrollTop = 0
     renderedLastYRef.current = null
-    setTextH(0)
+    pdfLastYRef.current      = null
+    textHRef.current         = 0
+    fileItemRectsRef.current = []  // 파일 목록 rect 캐시 무효화
+  }, [activeIdx, applyZoom])
+
+  // ── 텍스트 자연 높이 측정 (파일 전환·마운트 시만)
+  useLayoutEffect(() => {
+    if (textInnerRef.current)
+      textHRef.current = textInnerRef.current.offsetHeight
   }, [activeIdx])
 
-  // 텍스트·문서 자연 높이 측정 (transform spacer 계산용)
-  useLayoutEffect(() => {
-    if (textInnerRef.current) setTextH(textInnerRef.current.offsetHeight)
-  })
-
-  // 텍스트·문서 파일 핀치 스크롤 RAF (이미지·오디오·비디오·PDF 제외)
-  useEffect(() => {
-    const SCROLL_TYPES = new Set(['image', 'video', 'audio', 'pdf'])
-    let rafId
-    function poll() {
-      const viewerOpen = handState.dismissed && handState.dismissDir === 'left'
-      const file    = filesRef.current[activeIdxRef.current]
-      const isText  = viewerOpen && file && !SCROLL_TYPES.has(file.type)
-      const zooming = handState.bothZoomActive
-      // 엄지+검지(indexPinch) 또는 엄지+중지(activePinch) 모두 지원
-      const useIndex  = handState.indexPinchActive
-      const useScroll = !useIndex && handState.activePinch
-      const active    = useIndex || useScroll
-      const px        = useIndex ? handState.indexPinchMidX : handState.pinchMidX
-      const py        = useIndex ? handState.indexPinchMidY : handState.pinchMidY
-      if (isText && !zooming && active && px > 0.30) {
-        const el = renderedScrollRef.current
-        if (el && renderedLastYRef.current !== null) {
-          el.scrollTop += (py - renderedLastYRef.current) * window.innerHeight * 2.2
-        }
-        renderedLastYRef.current = py
-      } else {
-        renderedLastYRef.current = null
-      }
-      rafId = requestAnimationFrame(poll)
-    }
-    rafId = requestAnimationFrame(poll)
-    return () => cancelAnimationFrame(rafId)
-  }, [])
-
-  // 모든 파일 타입 줌 RAF — 파일 뷰어가 열려 있을 때만 zoomDelta 소비
+  // ── 단일 통합 RAF: 줌 + 스크롤 + 핀치 드래그 → RAF 4개 → 1개
   useEffect(() => {
     let rafId
+    const SCROLL_TYPES = new Set(['image', 'video', 'audio'])
+
     function poll() {
       const viewerOpen = handState.dismissed && handState.dismissDir === 'left'
-      if (viewerOpen && handState.zoomDelta !== 0 && handState.bothZoomActive) {
+      const file       = filesRef.current[activeIdxRef.current]
+      const zooming    = handState.bothZoomActive
+
+      // ── 줌 (직접 DOM 조작, React setState 없음)
+      if (viewerOpen && handState.zoomDelta !== 0 && zooming) {
         const next = Math.max(1, Math.min(4, contentZoomRef.current + handState.zoomDelta * 3))
         contentZoomRef.current = next
-        setContentZoom(next)
         handState.zoomDelta = 0
+        applyZoom(file, next)
       }
-      rafId = requestAnimationFrame(poll)
-    }
-    rafId = requestAnimationFrame(poll)
-    return () => cancelAnimationFrame(rafId)
-  }, [])
 
-  // 컴포넌트 언마운트 시 ObjectURL 해제
-  useEffect(() => {
-    const urls = urlsRef.current
-    return () => urls.forEach(u => URL.revokeObjectURL(u))
-  }, [])
+      // ── 스크롤 (파일 뷰어가 열려있고, 줌 중이 아닐 때)
+      if (viewerOpen && !zooming) {
+        const useIndex  = handState.indexPinchActive
+        const useScroll = !useIndex && handState.activePinch
+        const active    = useIndex || useScroll
+        const px        = useIndex ? handState.indexPinchMidX : handState.pinchMidX
+        const py        = useIndex ? handState.indexPinchMidY : handState.pinchMidY
 
-  // 엄지+검지 핀치 드래그: 사이드바 파일 → 메인 영역에 드롭하여 열기
-  useEffect(() => {
-    let rafId
-    function poll() {
+        if (file && active && px > DROP_X) {
+          if (file.type === 'pdf') {
+            if (pdfLastYRef.current !== null)
+              pdfViewerRef.current?.scrollBy((py - pdfLastYRef.current) * window.innerHeight * 2.2)
+            pdfLastYRef.current      = py
+            renderedLastYRef.current = null
+          } else if (!SCROLL_TYPES.has(file.type)) {
+            const el = renderedScrollRef.current
+            if (el && renderedLastYRef.current !== null)
+              el.scrollTop += (py - renderedLastYRef.current) * window.innerHeight * 2.2
+            renderedLastYRef.current = py
+            pdfLastYRef.current      = null
+          } else {
+            renderedLastYRef.current = null
+            pdfLastYRef.current      = null
+          }
+        } else {
+          renderedLastYRef.current = null
+          pdfLastYRef.current      = null
+        }
+      } else if (!viewerOpen) {
+        renderedLastYRef.current = null
+        pdfLastYRef.current      = null
+      }
+
+      // ── 핀치 드래그 (사이드바 파일 → 메인 열기)
       const px     = handState.indexPinchMidX
       const py     = handState.indexPinchMidY
       const active = handState.indexPinchActive
 
       if (active) {
-        // 사이드바 영역에서 파일 잡기
         if (pinchDraggingRef.current === null && px < SIDEBAR_X && filesRef.current.length > 0) {
-          const items = fileListRef.current?.querySelectorAll('.fv-file-item')
-          if (items) {
-            for (let i = 0; i < items.length; i++) {
-              const rect = items[i].getBoundingClientRect()
-              const topY = rect.top / window.innerHeight
-              const botY = rect.bottom / window.innerHeight
-              if (py >= topY - 0.01 && py <= botY + 0.01) {
-                pinchDraggingRef.current = i
-                setPinchDragging(i)
-                break
-              }
+          // rect 캐시: 없으면 측정, 있으면 재사용
+          if (!fileItemRectsRef.current.length) {
+            const items = fileListRef.current?.querySelectorAll('.fv-file-item')
+            if (items) {
+              fileItemRectsRef.current = Array.from(items).map(el => {
+                const r = el.getBoundingClientRect()
+                return { top: r.top / window.innerHeight, bottom: r.bottom / window.innerHeight }
+              })
+            }
+          }
+          for (let i = 0; i < fileItemRectsRef.current.length; i++) {
+            const { top, bottom } = fileItemRectsRef.current[i]
+            if (py >= top - 0.01 && py <= bottom + 0.01) {
+              pinchDraggingRef.current = i
+              setPinchDragging(i)
+              break
             }
           }
         }
@@ -297,17 +305,14 @@ export default function FileViewerCore() {
           setPinchDragPos({ x: px * window.innerWidth, y: py * window.innerHeight })
         }
         prevPinchRef.current = true
-
       } else {
-        // 핀치 해제 → 드롭
         if (prevPinchRef.current && pinchDraggingRef.current !== null) {
-          if (dropReadyRef.current) {
-            setActiveIdx(pinchDraggingRef.current)
-          }
+          if (dropReadyRef.current) setActiveIdx(pinchDraggingRef.current)
           pinchDraggingRef.current = null
           dropReadyRef.current     = false
           setPinchDragging(null)
           setPinchDropReady(false)
+          fileItemRectsRef.current = []  // 드롭 후 캐시 초기화
         }
         prevPinchRef.current = false
       }
@@ -316,6 +321,11 @@ export default function FileViewerCore() {
     }
     rafId = requestAnimationFrame(poll)
     return () => cancelAnimationFrame(rafId)
+  }, [applyZoom])
+
+  useEffect(() => {
+    const urls = urlsRef.current
+    return () => urls.forEach(u => URL.revokeObjectURL(u))
   }, [])
 
   const handleFiles = useCallback(async (fileList) => {
@@ -329,6 +339,7 @@ export default function FileViewerCore() {
       return next
     })
     setLoading(false)
+    fileItemRectsRef.current = []  // 파일 추가 후 캐시 무효화
   }, [])
 
   const onDrop      = useCallback(e => { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files) }, [handleFiles])
@@ -344,6 +355,7 @@ export default function FileViewerCore() {
       setActiveIdx(Math.max(0, Math.min(activeIdx, next.length - 1)))
       return next
     })
+    fileItemRectsRef.current = []
   }, [activeIdx])
 
   const active = files[activeIdx]
@@ -387,7 +399,7 @@ export default function FileViewerCore() {
                   i === activeIdx      ? 'fv-file-item--active'         : '',
                   i === pinchDragging  ? 'fv-file-item--pinch-dragging' : '',
                 ].filter(Boolean).join(' ')}
-                onClick={() => setActiveIdx(i)}
+                onClick={() => { setActiveIdx(i); fileItemRectsRef.current = [] }}
               >
                 <span className="fv-file-tag">{EXT_LABEL[f.ext] ?? f.ext.toUpperCase()}</span>
                 <span className="fv-file-name" title={f.name}>
@@ -416,35 +428,36 @@ export default function FileViewerCore() {
                 <span className="fv-content-name">{active.name}</span>
               </div>
               <div className="fv-content-body">
-                {/* 미디어(이미지·영상·오디오): transform scale로 시각적 확대 */}
                 {['image', 'video', 'audio'].includes(active.type)
                   ? (
-                    <div style={{
-                      display: 'flex', flexDirection: 'column',
-                      width: '100%', height: '100%',
-                      transform: `scale(${contentZoom})`,
-                      transformOrigin: 'center center',
-                      transition: 'transform 0.05s',
-                    }}>
-                      <FileContent file={active} zoom={contentZoom} />
+                    <div
+                      ref={mediaWrapperRef}
+                      style={{
+                        display: 'flex', flexDirection: 'column',
+                        width: '100%', height: '100%',
+                        transform: 'scale(1)',
+                        transformOrigin: 'center center',
+                        transition: 'transform 0.05s',
+                      }}
+                    >
+                      <FileContent file={active} pdfRef={pdfViewerRef} />
                     </div>
                   )
-                  /* 텍스트·문서: transform + spacer → 확대 시 스크롤 범위 보정 */
-                  : !['pdf'].includes(active.type)
+                  : active.type !== 'pdf'
                     ? (
                       <div ref={renderedScrollRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
-                        <div ref={textInnerRef} style={{ transform: `scale(${contentZoom})`, transformOrigin: 'top left' }}>
-                          <FileContent file={active} zoom={contentZoom} />
+                        <div
+                          ref={textInnerRef}
+                          style={{ transform: 'scale(1)', transformOrigin: 'top left' }}
+                        >
+                          <FileContent file={active} pdfRef={pdfViewerRef} />
                         </div>
-                        {contentZoom > 1 && textH > 0 && (
-                          <div style={{ height: `${textH * (contentZoom - 1)}px` }} />
-                        )}
+                        <div ref={textSpacerRef} style={{ height: '0px' }} />
                       </div>
                     )
-                  /* PDF: zoom은 PdfViewer 내부 스크롤 컨테이너 안에서 처리 */
                     : (
                       <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}>
-                        <FileContent file={active} zoom={contentZoom} />
+                        <FileContent file={active} pdfRef={pdfViewerRef} />
                       </div>
                     )
                 }

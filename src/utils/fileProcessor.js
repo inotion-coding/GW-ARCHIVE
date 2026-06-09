@@ -1,9 +1,3 @@
-import { marked } from 'marked'
-import mammoth from 'mammoth/mammoth.browser'
-import * as XLSX from 'xlsx'
-import JSZip from 'jszip'
-import hljs from 'highlight.js/lib/common'
-
 // ── 확장자 분류 세트
 export const IMAGE_EXTS = new Set(['jpg','jpeg','png','gif','webp','svg','bmp','ico'])
 export const VIDEO_EXTS = new Set(['mp4','webm','mov','avi','mkv'])
@@ -59,7 +53,6 @@ const AUDIO_MIME = {
   mp3:'audio/mpeg', wav:'audio/wav', flac:'audio/flac', aac:'audio/aac', ogg:'audio/ogg', m4a:'audio/mp4',
 }
 
-// ── hljs 언어 매핑
 const LANG_MAP = {
   js:'javascript', jsx:'javascript', ts:'typescript', tsx:'typescript',
   py:'python', rb:'ruby', rs:'rust', go:'go', java:'java', kt:'kotlin',
@@ -72,7 +65,8 @@ const LANG_MAP = {
   sql:'sql', lua:'lua', vue:'xml', svelte:'xml',
 }
 
-function highlightCode(code, ext) {
+async function highlightCode(code, ext) {
+  const { default: hljs } = await import('highlight.js/lib/common')
   const lang = LANG_MAP[ext]
   try {
     const result = lang
@@ -84,29 +78,20 @@ function highlightCode(code, ext) {
   }
 }
 
-// ── DOC 바이너리 텍스트 추출 (OLE Compound Document)
 function extractDocText(buffer) {
   const bytes = new Uint8Array(buffer)
-
-  // ZIP 시그니처 (PK) → 실제로는 .docx → mammoth에게 위임
   if (bytes[0] === 0x50 && bytes[1] === 0x4B) return null
-
-  // OLE2 시그니처 확인
   if (bytes[0] !== 0xD0 || bytes[1] !== 0xCF) return null
-
   const texts = []
   let run = []
-
-  // 섹터 헤더(512바이트) 이후부터 UTF-16LE 텍스트 스캔
   for (let i = 512; i < bytes.length - 1; i += 2) {
     const cp = bytes[i] | (bytes[i + 1] << 8)
-    const ok = (cp >= 0x0020 && cp <= 0x007E)   // ASCII printable
-      || (cp >= 0x00C0 && cp <= 0x024F)           // Latin extended
-      || (cp >= 0x0400 && cp <= 0x04FF)           // Cyrillic
-      || (cp >= 0x4E00 && cp <= 0x9FFF)           // CJK
-      || (cp >= 0xAC00 && cp <= 0xD7A3)           // Korean Hangul
-      || cp === 0x000A || cp === 0x000D           // newline
-
+    const ok = (cp >= 0x0020 && cp <= 0x007E)
+      || (cp >= 0x00C0 && cp <= 0x024F)
+      || (cp >= 0x0400 && cp <= 0x04FF)
+      || (cp >= 0x4E00 && cp <= 0x9FFF)
+      || (cp >= 0xAC00 && cp <= 0xD7A3)
+      || cp === 0x000A || cp === 0x000D
     if (ok) {
       run.push(cp === 0x000D ? '' : String.fromCharCode(cp))
     } else {
@@ -123,11 +108,9 @@ function extractDocText(buffer) {
     const letters = (s.match(/[a-zA-Z가-힣一-鿿Ѐ-ӿ]/g) ?? []).length
     if (letters / s.length > 0.38) texts.push(s)
   }
-
   return texts.length ? texts : null
 }
 
-// ── RTF 텍스트 추출
 function parseRtf(raw) {
   let s = raw
   s = s.replace(/\{[^{}]*\}/g, '')
@@ -139,7 +122,6 @@ function parseRtf(raw) {
     : '<p class="fv-empty-msg">No content</p>'
 }
 
-// ── PPTX 슬라이드 XML 파싱
 function parsePptxXml(xml, slideNum) {
   const results = []
   const paraRe = /<a:p\b[^>]*>([\s\S]*?)<\/a:p>/g
@@ -157,13 +139,11 @@ function parsePptxXml(xml, slideNum) {
   return `<div class="fv-slide"><div class="fv-slide-num">Slide ${slideNum}</div>${results.map(p=>`<p>${p}</p>`).join('')}</div>`
 }
 
-// ── HWPX (ZIP 기반 HWP XML)
 async function parseHwpx(zip) {
   const keys = Object.keys(zip.files)
     .filter(k => /^Contents\/section\d+\.xml$/i.test(k))
     .sort((a, b) => parseInt(a.match(/(\d+)/)[1]) - parseInt(b.match(/(\d+)/)[1]))
   if (!keys.length) return '<p class="fv-empty-msg">No sections found</p>'
-
   const parts = []
   for (let i = 0; i < keys.length; i++) {
     const xml = await zip.files[keys[i]].async('string')
@@ -171,10 +151,8 @@ async function parseHwpx(zip) {
     const paraRe = /<hp:p\b[^>]*>([\s\S]*?)<\/hp:p>/g
     let pm
     while ((pm = paraRe.exec(xml)) !== null) {
-      const text = pm[1]
-        .replace(/<[^>]+>/g, '')
-        .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&')
-        .trim()
+      const text = pm[1].replace(/<[^>]+>/g, '')
+        .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').trim()
       if (text) paras.push(text)
     }
     if (paras.length)
@@ -183,59 +161,47 @@ async function parseHwpx(zip) {
   return parts.join('') || '<p class="fv-empty-msg">No text found</p>'
 }
 
-// ── ODT / ODP (OpenDocument ZIP XML)
 async function parseOpenDocument(zip, ext) {
   const xml = await zip.files['content.xml']?.async('string')
   if (!xml) return '<p class="fv-empty-msg">content.xml not found</p>'
-
   if (ext === 'odp') {
     const slides = []; let n = 0
     const slideRe = /<draw:page[^>]*>([\s\S]*?)<\/draw:page>/g
     let sm
     while ((sm = slideRe.exec(xml)) !== null) {
       n++
-      const text = sm[1]
-        .replace(/<[^>]+>/g,' ').replace(/\s+/g,' ')
+      const text = sm[1].replace(/<[^>]+>/g,' ').replace(/\s+/g,' ')
         .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').trim()
       if (text) slides.push(`<div class="fv-slide"><div class="fv-slide-num">Slide ${n}</div><p>${text}</p></div>`)
     }
     return slides.join('') || '<p class="fv-empty-msg">No text found</p>'
   }
-
-  // ODT
   const paras = []
   const paraRe = /<text:p[^>]*>([\s\S]*?)<\/text:p>/g
   let pm
   while ((pm = paraRe.exec(xml)) !== null) {
-    const text = pm[1]
-      .replace(/<[^>]+>/g,' ').replace(/\s+/g,' ')
+    const text = pm[1].replace(/<[^>]+>/g,' ').replace(/\s+/g,' ')
       .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&').trim()
     if (text) paras.push(text)
   }
   return paras.map(p=>`<p>${p}</p>`).join('') || '<p class="fv-empty-msg">No text found</p>'
 }
 
-// ── EPUB
 async function parseEpub(zip) {
   const container = await zip.files['META-INF/container.xml']?.async('string')
   if (!container) return '<p class="fv-empty-msg">container.xml not found</p>'
-
   const opfMatch = container.match(/full-path="([^"]+\.opf)"/)
   if (!opfMatch) return '<p class="fv-empty-msg">OPF not found</p>'
-
   const opfPath = opfMatch[1]
   const opfDir  = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : ''
   const opf     = await zip.files[opfPath]?.async('string')
   if (!opf) return '<p class="fv-empty-msg">Failed to read OPF</p>'
-
   const manifest = {}
   const mRe = /<item[^>]+id="([^"]+)"[^>]+href="([^"]+)"/g; let mm
   while ((mm = mRe.exec(opf)) !== null) manifest[mm[1]] = mm[2]
-
   const spine = []
   const sRe = /<itemref[^>]+idref="([^"]+)"/g; let sm
   while ((sm = sRe.exec(opf)) !== null) if (manifest[sm[1]]) spine.push(manifest[sm[1]])
-
   const parts = []
   for (const href of spine.slice(0, 40)) {
     const html = await zip.files[opfDir + href]?.async('string')
@@ -257,11 +223,9 @@ async function parseEpub(zip) {
   return parts.join('<div class="fv-sheet-sep"></div>') || '<p class="fv-empty-msg">No content</p>'
 }
 
-// ── 메인 파일 처리 함수
 export async function processFile(file) {
   const ext = file.name.split('.').pop().toLowerCase()
 
-  // 미디어 — ObjectURL 반환
   if (IMAGE_EXTS.has(ext))
     return { name: file.name, ext, type: 'image', url: URL.createObjectURL(file) }
   if (VIDEO_EXTS.has(ext))
@@ -273,6 +237,7 @@ export async function processFile(file) {
 
   try {
     if (ext === 'md') {
+      const { marked } = await import('marked')
       return { name: file.name, ext, type: 'html', html: marked.parse(await file.text()) }
     }
     if (ext === 'txt' || ext === 'log') {
@@ -283,21 +248,21 @@ export async function processFile(file) {
       return { name: file.name, ext, type: 'html', html: parseRtf(await file.text()) }
     }
     if (CODE_EXTS.has(ext)) {
-      return { name: file.name, ext, type: 'html', html: highlightCode(await file.text(), ext) }
+      return { name: file.name, ext, type: 'html', html: await highlightCode(await file.text(), ext) }
     }
     if (ext === 'docx') {
+      const { default: mammoth } = await import('mammoth/mammoth.browser')
       const result = await mammoth.convertToHtml({ arrayBuffer: await file.arrayBuffer() })
       return { name: file.name, ext, type: 'html', html: result.value }
     }
     if (ext === 'doc') {
       const buf = await file.arrayBuffer()
-      // ZIP 시그니처면 실제로 docx — mammoth로 처리
       const sig = new Uint8Array(buf, 0, 2)
       if (sig[0] === 0x50 && sig[1] === 0x4B) {
+        const { default: mammoth } = await import('mammoth/mammoth.browser')
         const result = await mammoth.convertToHtml({ arrayBuffer: buf })
         return { name: file.name, ext, type: 'html', html: result.value }
       }
-      // OLE 바이너리 .doc — 텍스트 스캔
       const texts = extractDocText(buf)
       if (!texts) {
         return { name: file.name, ext, type: 'html', html: '<p class="fv-err">Could not read this .doc file.<br>Please save it as <strong>.docx</strong> and try again.</p>' }
@@ -306,6 +271,7 @@ export async function processFile(file) {
       return { name: file.name, ext, type: 'html', html: `<div class="fv-doc-plain">${html}</div>` }
     }
     if (SHEET_EXTS.has(ext)) {
+      const XLSX = await import('xlsx')
       const wb   = XLSX.read(new Uint8Array(await file.arrayBuffer()), { type: 'array' })
       const html = wb.SheetNames
         .map(n => `<div class="fv-sheet-label">${n}</div>${XLSX.utils.sheet_to_html(wb.Sheets[n], { editable: false })}`)
@@ -315,7 +281,7 @@ export async function processFile(file) {
     if (ext === 'hwp') {
       return { name: file.name, ext, type: 'html', html: '<p class="fv-err">HWP binary format cannot be parsed in the browser.<br>Please save the file as <strong>HWPX</strong> or <strong>DOCX</strong> and try again.</p>' }
     }
-    // ZIP 기반 포맷
+    const { default: JSZip } = await import('jszip')
     const zip = await JSZip.loadAsync(await file.arrayBuffer())
     if (ext === 'pptx') {
       const keys = Object.keys(zip.files)

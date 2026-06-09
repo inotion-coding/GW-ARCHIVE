@@ -1,11 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
-import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision'
 import handState from '../utils/handState'
 import '../styles/hand-tracker.css'
-
-const WASM_URL  = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
-const MODEL_URL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task'
 
 const CONNECTIONS = [
   [0,1],[1,2],[2,3],[3,4],
@@ -16,41 +12,31 @@ const CONNECTIONS = [
 ]
 
 const SCROLL_RATIO      = 0.33
-const SCROLL_HYSTERESIS = 1.30  // 핀치 유지 임계값 배율 (0.33 → 0.43)
-const ZOOM_RATIO    = 0.20
-const INDEX_PINCH_RATIO = 0.25  // 단일 엄지+검지 핀치 감지 임계값 (캘린더 드래그용)
-const HAND_SENS     = 26
-const DX_DEAD_ZONE  = 0.002
-const ZOOM_SENS     = 2.2
-const TAP_THRESHOLD = 0.04
-const BACK_DBL_FRAMES     = 18   // 뒤로가기 더블탭 시간 창 (프레임, ~0.6초 at 30fps)
-const BACK_MOVE_THRESHOLD = 0.04 // 이 이상 스크롤하면 탭 미인식 (스크롤 vs 더블탭 구분)
-const FIST_HOLD_FRAMES  = 15    // 주먹 유지 필요 프레임 (~0.5초 at 30fps)
-const INACTIVITY_FRAMES = 1800  // 자동 잠금 비활성 프레임 (~60초 at 30fps)
-const FLASH_FRAMES      = 45    // 색상 플래시 지속 프레임 (~1.5초)
-const BACK_ZONE_COS     = Math.cos(20 * Math.PI / 180)  // 손등 기준 ±20° 차단 (cos20° ≈ 0.940)
-const TRI_PINCH_RATIO   = 0.28   // 엄지+검지+중지 3핀치 임계 비율
+const SCROLL_HYSTERESIS = 1.30
+const ZOOM_RATIO        = 0.20
+const INDEX_PINCH_RATIO = 0.25
+const HAND_SENS         = 26
+const DX_DEAD_ZONE      = 0.002
+const ZOOM_SENS         = 2.2
+const TAP_THRESHOLD     = 0.04
+const BACK_DBL_FRAMES     = 18
+const BACK_MOVE_THRESHOLD = 0.04
+const FIST_HOLD_FRAMES  = 15
+const INACTIVITY_FRAMES = 1800
+const FLASH_FRAMES      = 45
+const BACK_ZONE_COS     = Math.cos(20 * Math.PI / 180)
+const TRI_PINCH_RATIO   = 0.28
+const ROT_IMPULSE       = 0.15
+const ROT_COOLDOWN      = 22
 
-// 회전 감지 파라미터
-const ROT_IMPULSE  = 0.15   // 발동 시 임펄스 속도 (FRIC=0.97 기준 5 카드 이동)
-const ROT_COOLDOWN = 22     // 발동 후 재발동 방지 프레임 (~0.7초 at 30fps)
-
-// 중지·약지·소지가 접혀 있는지 (검지 제외 주먹 판별)
 function isFingersFolded(lm) {
   return lm[12].y > lm[10].y && lm[16].y > lm[14].y && lm[20].y > lm[18].y
 }
 
-// 느슨한 주먹 — 4손가락 끝이 모두 PIP 관절보다 낮은 위치 (isFistClosed보다 관대)
 function isLooseFist(lm) {
-  return lm[8].y > lm[6].y &&   // 검지 끝 < PIP
-         lm[12].y > lm[10].y &&  // 중지 끝 < PIP
-         lm[16].y > lm[14].y &&  // 약지 끝 < PIP
-         lm[20].y > lm[18].y     // 소지 끝 < PIP
+  return lm[8].y > lm[6].y && lm[12].y > lm[10].y && lm[16].y > lm[14].y && lm[20].y > lm[18].y
 }
 
-// 완전한 주먹 (잠금 제스처)
-// 옆면: 4손가락 끝이 MCP(뿌리 관절)보다 아래 — PIP보다 훨씬 엄격
-// 앞면: isFingersFolded + 끝마디-손바닥 중심 거리 비율 < 0.7
 function isFistClosed(lm) {
   const hs = Math.hypot(lm[0].x - lm[9].x, lm[0].y - lm[9].y)
   if (hs < 0.01) return false
@@ -64,7 +50,6 @@ function isFistClosed(lm) {
   )
 }
 
-// 엄지(4)+검지(8)+중지(12) 3핀치 — 세 거리가 모두 handSize 대비 ratio 미만일 때 활성
 function analyzeTriPinch(lm, ratio) {
   const handSize = Math.hypot(lm[0].x - lm[9].x, lm[0].y - lm[9].y, (lm[0].z ?? 0) - (lm[9].z ?? 0))
   if (handSize < 0.01) return false
@@ -73,16 +58,13 @@ function analyzeTriPinch(lm, ratio) {
   return (d48 / handSize) < ratio && (d412 / handSize) < ratio
 }
 
-// 통합 핀치 분석: tipA·tipB 두 랜드마크 간 거리 비율 측정 (3D 거리로 각도 안정성 확보)
 function analyzePinch(lm, tipA, tipB, ratio) {
   const pinchDist = Math.hypot(
-    lm[tipA].x - lm[tipB].x,
-    lm[tipA].y - lm[tipB].y,
+    lm[tipA].x - lm[tipB].x, lm[tipA].y - lm[tipB].y,
     (lm[tipA].z ?? 0) - (lm[tipB].z ?? 0)
   )
   const handSize = Math.hypot(
-    lm[0].x - lm[9].x,
-    lm[0].y - lm[9].y,
+    lm[0].x - lm[9].x, lm[0].y - lm[9].y,
     (lm[0].z ?? 0) - (lm[9].z ?? 0)
   )
   return {
@@ -92,8 +74,6 @@ function analyzePinch(lm, tipA, tipB, ratio) {
   }
 }
 
-// 손등 완벽 기준 ±20° 이내 → true (모든 제스처 차단)
-// 손바닥 법선(3D 외적)의 카메라 방향 성분으로 각도 판별
 function isInHandBackZone(lm, side) {
   const v1x = lm[5].x - lm[0].x, v1y = lm[5].y - lm[0].y, v1z = (lm[5].z ?? 0) - (lm[0].z ?? 0)
   const v2x = lm[17].x - lm[0].x, v2y = lm[17].y - lm[0].y, v2z = (lm[17].z ?? 0) - (lm[0].z ?? 0)
@@ -102,12 +82,9 @@ function isInHandBackZone(lm, side) {
   const nz = v1x * v2y - v1y * v2x
   const mag = Math.hypot(nx, ny, nz)
   if (mag < 0.0001) return false
-  // 'Left'(사용자 오른손): 손등 방향 법선 nz < 0 → -nz > 0
-  // 'Right'(사용자 왼손): 손등 방향 법선 nz > 0
   return (side === 'Left' ? -nz : nz) / mag > BACK_ZONE_COS
 }
 
-// 손등이 명확히 카메라를 향할 때만 true — 측면 뷰(cross ≈ 0)는 허용
 function isHandBack(lm, side) {
   const v1x = lm[5].x - lm[0].x, v1y = lm[5].y - lm[0].y
   const v2x = lm[17].x - lm[0].x, v2y = lm[17].y - lm[0].y
@@ -115,10 +92,6 @@ function isHandBack(lm, side) {
   return side === 'Left' ? cross < -0.01 : cross > 0.01
 }
 
-// 손바닥이 카메라를 향하는지 판별
-// MediaPipe는 user-facing 카메라에서 좌우 레이블을 미러 기준으로 매김:
-//   MediaPipe 'Right' = 카메라 이미지 오른쪽 = 사용자 실제 왼손
-// 따라서 실제 사용자 오른손(MediaPipe 'Left')에서 손바닥 방향: cross > 0
 function isPalmFacing(lm, side) {
   const v1x = lm[5].x - lm[0].x,  v1y = lm[5].y - lm[0].y
   const v2x = lm[17].x - lm[0].x, v2y = lm[17].y - lm[0].y
@@ -126,20 +99,17 @@ function isPalmFacing(lm, side) {
   return side === 'Left' ? cross > 0 : cross < 0
 }
 
-// 검지만 펴고 나머지 접힘
 function isIndexOnly(lm) {
   return lm[8].y < lm[6].y && isFingersFolded(lm)
 }
 
-// 손바닥 roll 각도: 검지MCP(5) → 소지MCP(17) 벡터의 기울기
 function handRollAngle(lm) {
-  const dx = lm[5].x - lm[17].x
-  const dy = lm[5].y - lm[17].y
-  return Math.atan2(dy, dx)   // -π ~ +π
+  return Math.atan2(lm[5].y - lm[17].y, lm[5].x - lm[17].x)
 }
 
 function drawHand(lm, ctx, W, H, highlight, isDark, flashColor = null) {
-  const pt = i => ({ x: (1 - lm[i].x) * W, y: lm[i].y * H })
+  const ptX = i => (1 - lm[i].x) * W
+  const ptY = i => lm[i].y * H
   let stroke, dot
   if (flashColor === 'green') {
     stroke = 'rgba(80,220,120,0.92)'; dot = 'rgba(100,240,140,0.96)'
@@ -153,19 +123,25 @@ function drawHand(lm, ctx, W, H, highlight, isDark, flashColor = null) {
       ? (highlight ? 'rgba(230,230,230,0.95)' : 'rgba(150,150,150,0.75)')
       : (highlight ? 'rgba(45,45,45,0.9)'     : 'rgba(100,100,100,0.7)')
   }
+  // 21개 연결선 → 단일 path로 묶어 stroke 1회 (GPU 상태 변환 21→1)
   ctx.strokeStyle = stroke
   ctx.lineWidth = highlight ? 1.6 : 1.2
+  ctx.beginPath()
   for (const [a, b] of CONNECTIONS) {
-    const pa = pt(a), pb = pt(b)
-    ctx.beginPath(); ctx.moveTo(pa.x, pa.y); ctx.lineTo(pb.x, pb.y); ctx.stroke()
+    ctx.moveTo(ptX(a), ptY(a)); ctx.lineTo(ptX(b), ptY(b))
   }
-  for (let i = 0; i < 21; i++) {
-    const p = pt(i)
-    ctx.fillStyle = dot
-    ctx.beginPath(); ctx.arc(p.x, p.y, i === 0 ? 4 : 2, 0, Math.PI * 2); ctx.fill()
+  ctx.stroke()
+  // 20개 작은 점 → 단일 path로 묶어 fill 1회
+  ctx.fillStyle = dot
+  ctx.beginPath()
+  for (let i = 1; i < 21; i++) {
+    const x = ptX(i), y = ptY(i)
+    ctx.moveTo(x + 2, y); ctx.arc(x, y, 2, 0, Math.PI * 2)
   }
+  ctx.fill()
+  // 손목(크기 4)만 별도 처리
+  ctx.beginPath(); ctx.arc(ptX(0), ptY(0), 4, 0, Math.PI * 2); ctx.fill()
 }
-
 
 function drawPinchDot(lm, tipA, tipB, ctx, W, H, isDark, colorOverride) {
   const ptX = i => (1 - lm[i].x) * W
@@ -185,7 +161,6 @@ function drawIndexTip(lm, ctx, W, H, active, isDark) {
   ctx.beginPath(); ctx.arc(x, y, active ? 10 : 6, 0, Math.PI * 2); ctx.fill()
 }
 
-// 손목 주변에 회전 방향 호 표시
 function drawRotationArc(lm, ctx, W, H, side, isDark) {
   const wx = (1 - lm[0].x) * W
   const wy = lm[0].y * H
@@ -203,61 +178,87 @@ function drawRotationArc(lm, ctx, W, H, side, isDark) {
   ctx.setLineDash([])
 }
 
+// 보관된 drawState + lerp된 lms 좌표로 캔버스에 스켈레톤 렌더링
+function drawFrame(ctx, W, H, isDark, lms, ds) {
+  if (!ds || !lms || lms.length === 0) return
+  const modes = ds.handModes
+  for (let i = 0; i < lms.length; i++) {
+    const m = modes[i]
+    if (m === 'locked')        drawHand(lms[i], ctx, W, H, false, isDark, null)
+    else if (m === 'active')   drawHand(lms[i], ctx, W, H, true,  isDark, null)
+    else if (m === 'inactive') drawHand(lms[i], ctx, W, H, false, isDark, null)
+  }
+  if (ds.rotArc) {
+    const { handIdx, side } = ds.rotArc
+    if (handIdx < lms.length) drawRotationArc(lms[handIdx], ctx, W, H, side, isDark)
+  }
+  for (const hi of ds.triPinchCircles) {
+    if (hi >= lms.length) continue
+    const lm = lms[hi]
+    const ptX = i => (1 - lm[i].x) * W, ptY = i => lm[i].y * H
+    const cx = (ptX(4) + ptX(8) + ptX(12)) / 3, cy = (ptY(4) + ptY(8) + ptY(12)) / 3
+    ctx.fillStyle = isDark ? 'rgba(230,230,230,0.92)' : 'rgba(25,25,25,0.92)'
+    ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI * 2); ctx.fill()
+  }
+  const dotPts = []
+  for (const dot of ds.pinchDots) {
+    if (dot.handIdx >= lms.length) { dotPts.push(null); continue }
+    dotPts.push(drawPinchDot(lms[dot.handIdx], dot.a, dot.b, ctx, W, H, isDark, dot.color))
+  }
+  if (ds.pinchLine && dotPts.length >= 2 && dotPts[0] && dotPts[1]) {
+    const sa = ds.pinchLine.showActive
+    ctx.strokeStyle = sa ? (isDark ? 'rgba(210,210,210,0.5)' : 'rgba(40,40,40,0.45)')
+                         : (isDark ? 'rgba(210,210,210,0.18)' : 'rgba(40,40,40,0.18)')
+    ctx.lineWidth = 1; ctx.setLineDash([5, 5])
+    ctx.beginPath(); ctx.moveTo(dotPts[0].x, dotPts[0].y); ctx.lineTo(dotPts[1].x, dotPts[1].y); ctx.stroke()
+    ctx.setLineDash([])
+  }
+  if (ds.indexTip) {
+    const { handIdx, tapFired } = ds.indexTip
+    if (handIdx < lms.length) drawIndexTip(lms[handIdx], ctx, W, H, tapFired, isDark)
+  }
+}
+
 export default function HandTracker() {
-  const videoRef   = useRef(null)
-  const canvasRef  = useRef(null)
-  const location   = useLocation()
+  const videoRef    = useRef(null)
+  const canvasRef   = useRef(null)
+  const location    = useLocation()
   const locationRef = useRef(location.pathname)
   locationRef.current = location.pathname
 
   useEffect(() => {
-    let landmarker   = null
-    let rafId        = null
-    let lastDetectMs = 0          // 30fps 스로틀용
-    let lastX           = null
-    let wasPinching     = false
-    let lastZoomDist    = null
-    let wasZoomPinching = false
-    let lastIndexY      = null
-    let tapFired        = false
-    let frameCount      = 0
-    let doubleTapCount  = 0
-    let doubleTapFrame  = 0
-    let pinchMoveAccum       = 0      // 현재 핀치 중 누적 이동량 (더블탭 vs 스크롤 구분)
-    let lastScrollMidY       = null   // 양손 수직 드래그 추적용
-    let wasBothScrollPinching = false // 양손 핀치 히스테리시스용
-    let lastTriPinchX = { Left: null, Right: null } // 3핀치 손목 X 추적 (수평 드래그용)
+    let rafId          = null
+    let workerReady    = false
+    let workerBusy     = false
+    let drawState = null   // 제스처 시각화 상태 (handModes, pinchDots 등)
+    let curLms    = null   // 최신 검출 랜드마크
 
-    // 손별 roll 각도 추적 (Left / Right)
+    let lastX              = null
+    let wasPinching        = false
+    let lastZoomDist       = null
+    let wasZoomPinching    = false
+    let lastIndexY         = null
+    let tapFired           = false
+    let frameCount         = 0
+    let doubleTapCount     = 0
+    let doubleTapFrame     = 0
+    let pinchMoveAccum        = 0
+    let lastScrollMidY        = null
+    let wasBothScrollPinching = false
+    let lastTriPinchX = { Left: null, Right: null }
+
     const rollState = {
       Left:  { lastAngle: null, cumAngle: 0, cooldown: 0, startPalmFacing: null },
       Right: { lastAngle: null, cumAngle: 0, cooldown: 0, startPalmFacing: null },
     }
-
-    // 손별 잠금 제스처 상태
     const lockState = {
       Left:  { holdFrames: 0, missFrames: 0, cooldown: 0, lastSeenFrame: -INACTIVITY_FRAMES },
       Right: { holdFrames: 0, missFrames: 0, cooldown: 0, lastSeenFrame: -INACTIVITY_FRAMES },
     }
 
-    async function init() {
-      try {
-        const vision = await FilesetResolver.forVisionTasks(WASM_URL)
-        landmarker = await HandLandmarker.createFromOptions(vision, {
-          baseOptions: { modelAssetPath: MODEL_URL, delegate: 'GPU' },
-          runningMode: 'VIDEO',
-          numHands: 2,
-        })
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: 640, height: 480 },
-        })
-        videoRef.current.srcObject = stream
-        await videoRef.current.play()
-        rafId = requestAnimationFrame(detect)
-      } catch (err) {
-        console.warn('[HandTracker] 초기화 실패:', err)
-      }
-    }
+    // OffscreenCanvas — 영상 프레임 캡처용 (메인 스레드에서 한 번 생성)
+    const captureCanvas = new OffscreenCanvas(320, 240)
+    const captureCtx    = captureCanvas.getContext('2d')
 
     function resetHandState() {
       handState.active            = false
@@ -271,25 +272,11 @@ export default function HandTracker() {
       handState.zoomMidY          = 0
     }
 
-    function detect(ts) {
-      rafId = requestAnimationFrame(detect)
-      // 30fps 캡: MediaPipe 추론 빈도를 절반으로 줄여 노트북 부하 감소
-      if (ts - lastDetectMs < 33) return
-      lastDetectMs = ts
-
-      const video  = videoRef.current
-      const canvas = canvasRef.current
-      if (!video || !canvas || !landmarker || video.readyState < 2) return
-
-      const W = canvas.width  = window.innerWidth
-      const H = canvas.height = window.innerHeight
-      const ctx = canvas.getContext('2d')
-      ctx.clearRect(0, 0, W, H)
-      const isDark = document.documentElement.classList.contains('dark')
-
-      const result     = landmarker.detectForVideo(video, performance.now())
-      const lms        = result.landmarks
-      const handedness = result.handedness   // [{categoryName:'Left'|'Right', score}][]
+    // Worker에서 추론 결과가 도착하면 호출 — 메인 스레드에서 실행되지만 RAF 밖에서 비동기 실행
+    function onWorkerResult({ landmarks: lms, handedness }) {
+      workerBusy = false
+      curLms    = lms
+      drawState = null
 
       if (lms.length === 0) {
         if (wasPinching) { handState.snap = true; wasPinching = false }
@@ -298,38 +285,36 @@ export default function HandTracker() {
         lastTriPinchX.Left = null; lastTriPinchX.Right = null
         rollState.Left.lastAngle  = null; rollState.Left.cumAngle  = 0; rollState.Left.startPalmFacing  = null
         rollState.Right.lastAngle = null; rollState.Right.cumAngle = 0; rollState.Right.startPalmFacing = null
-        for (const s of ['Left', 'Right']) {
-          lockState[s].holdFrames = 0
-          lockState[s].missFrames = 0
-        }
-        handState.leftLockProgress  = 0
-        handState.rightLockProgress = 0
+        for (const s of ['Left', 'Right']) { lockState[s].holdFrames = 0; lockState[s].missFrames = 0 }
+        handState.leftLockProgress = 0; handState.rightLockProgress = 0
         resetHandState()
         return
       }
 
-      // 잠금 해제된 손만 제스처에 사용 — 잠금된 손은 시퀀스 감지에만 참여
-      const gestureLms = [], gestureHandedness = []
+      // 이번 프레임 드로우 상태 (lerp 가능하도록 인덱스 기반으로 저장)
+      const ds = {
+        handModes: new Array(lms.length).fill(null),  // 'locked'|'active'|'inactive' per lms index
+        triPinchCircles: [],   // 삼지 원 표시 handIdx 목록
+        pinchDots: [],         // [{handIdx, a, b, color}]
+        pinchLine: null,       // {showActive: bool}
+        indexTip: null,        // {handIdx, tapFired}
+        rotArc: null,          // {handIdx, side}
+      }
+
+      // 잠긴 손 마킹 + 제스처 손 인덱스 추적 (동일 루프)
+      const gestureLms = [], gestureHandedness = [], gestureOrigIdx = []
       for (let i = 0; i < lms.length; i++) {
         const side   = handedness[i]?.[0]?.categoryName
         const locked = side === 'Left' ? handState.leftLocked : handState.rightLocked
-        if (!locked) { gestureLms.push(lms[i]); gestureHandedness.push(handedness[i]) }
+        if (locked) ds.handModes[i] = 'locked'
+        else { gestureLms.push(lms[i]); gestureHandedness.push(handedness[i]); gestureOrigIdx.push(i) }
       }
-      // 손등 ±20° 마스크 — true인 손은 모든 제스처 비활성
       const backZoneMask = gestureLms.map((lm, i) => {
         const side = gestureHandedness[i]?.[0]?.categoryName
         return side ? isInHandBackZone(lm, side) : false
       })
       handState.active = gestureLms.some((_, i) => !backZoneMask[i])
 
-      // 잠금된 손 스켈레톤 (흐릿하게만, 색상 플래시 없음)
-      for (let i = 0; i < lms.length; i++) {
-        const side   = handedness[i]?.[0]?.categoryName
-        const locked = side === 'Left' ? handState.leftLocked : handState.rightLocked
-        if (locked) drawHand(lms[i], ctx, W, H, false, isDark, null)
-      }
-
-      // 히스테리시스: 이전 프레임에 핀치 중이었으면 더 넓은 임계값으로 유지
       const scrollRatio = SCROLL_RATIO * ((wasPinching || wasBothScrollPinching) ? SCROLL_HYSTERESIS : 1.0)
       const scrollInfos = gestureLms.map((lm, i) => {
         if (backZoneMask[i]) return { activePinch: false, midX: 0, midY: 0 }
@@ -352,7 +337,6 @@ export default function HandTracker() {
         }
         return info
       })
-      // 단일 엄지+검지 핀치 (캘린더 드래그 위치 추적용)
       const backInfos = gestureLms.map((lm, i) => {
         if (backZoneMask[i] || isLooseFist(lm) || isIndexOnly(lm))
           return { activePinch: false, midX: 0, midY: 0 }
@@ -361,10 +345,8 @@ export default function HandTracker() {
 
       const firstLmFist = gestureLms.find((_, i) => !backZoneMask[i]) ?? null
 
-      // ── 3핀치 (엄지+검지+중지) 감지 — 손별로 분류 ──
-      // 양손 수직 dismiss(bothScrollPinch) 중에는 triPinch 차단 (수직 제스처 간섭 방지)
       const activePinchCountPre = scrollInfos.filter(s => s.activePinch).length
-      const triPinchHands = {}  // { 'Left': {lm, idx}, 'Right': {lm, idx} }
+      const triPinchHands = {}
       for (let i = 0; i < gestureLms.length; i++) {
         if (backZoneMask[i]) continue
         const side = gestureHandedness[i]?.[0]?.categoryName
@@ -374,15 +356,12 @@ export default function HandTracker() {
       const leftTriPinch  = activePinchCountPre < 2 && !!triPinchHands['Right'] && !isFistClosed(triPinchHands['Right'].lm) && analyzeTriPinch(triPinchHands['Right'].lm, TRI_PINCH_RATIO)
       const anyTriPinch   = rightTriPinch || leftTriPinch
 
-      // ── 손 회전 감지 ──
       const anyScrollPinch = scrollInfos.some(s => s.activePinch)
       const bothZoomPinch  = gestureLms.length === 2 && zoomInfos[0].activePinch && zoomInfos[1].activePinch
 
-      // ── 엄지+검지 더블탭 (단일 손, 잠금 해제) → 뒤로 가기 ──
       frameCount++
       const isSingleZoomPinch = !bothZoomPinch && !anyScrollPinch && backInfos.some(b => b.activePinch)
 
-      // 단일 엄지+검지 핀치 중심 노출 (캘린더 날짜 선택용)
       handState.indexPinchActive = isSingleZoomPinch
       if (isSingleZoomPinch) {
         const bi = backInfos.findIndex(b => b.activePinch)
@@ -395,7 +374,6 @@ export default function HandTracker() {
         handState.indexPinchMidY = 0
       }
 
-      // 쿨다운 카운트다운
       for (const side of ['Left', 'Right']) {
         if (rollState[side].cooldown > 0) {
           rollState[side].cooldown--
@@ -406,73 +384,55 @@ export default function HandTracker() {
         }
       }
 
-      // 스크롤 핀치 또는 드래그 중에는 회전 차단
       if (!anyScrollPinch && !handState.dragging) {
         for (let hi = 0; hi < gestureLms.length; hi++) {
           if (backZoneMask[hi]) continue
           const lm   = gestureLms[hi]
           const side = gestureHandedness[hi]?.[0]?.categoryName
           if (!side || !rollState[side]) continue
-
           const angle = handRollAngle(lm)
           const rs    = rollState[side]
-
           if (rs.lastAngle !== null && rs.cooldown === 0) {
             let dAngle = angle - rs.lastAngle
             if (dAngle >  Math.PI) dAngle -= 2 * Math.PI
             if (dAngle < -Math.PI) dAngle += 2 * Math.PI
-
-            // 방향 전환: 누적 리셋 + 현재 손 방향을 새 기준점으로
             if (rs.cumAngle !== 0 && rs.cumAngle * dAngle < 0) {
-              rs.cumAngle = 0
-              rs.startPalmFacing = isPalmFacing(lm, side)
+              rs.cumAngle = 0; rs.startPalmFacing = isPalmFacing(lm, side)
             }
             rs.cumAngle += dAngle
-
             const FIRE_ANGLE = Math.PI * 75 / 180
             if (Math.abs(rs.cumAngle) > FIRE_ANGLE) {
-              // 손바닥→손등 방향에서 시작한 회전만 허용
               if (rs.startPalmFacing) {
                 const dir = side === 'Right' ? 1 : -1
                 handState.rotDx = dir * ROT_IMPULSE
                 rs.cooldown = ROT_COOLDOWN
-                drawRotationArc(lm, ctx, W, H, side, isDark)
+                ds.rotArc = { handIdx: gestureOrigIdx[hi], side }
               }
-              rs.cumAngle = 0
-              rs.startPalmFacing = null
+              rs.cumAngle = 0; rs.startPalmFacing = null
             }
           }
-
           if (rs.cooldown === 0) {
-            if (rs.lastAngle === null) {
-              rs.startPalmFacing = isPalmFacing(lm, side)  // 추적 시작 시 초기 방향 기록
-              rs.cumAngle = 0
-            }
+            if (rs.lastAngle === null) { rs.startPalmFacing = isPalmFacing(lm, side); rs.cumAngle = 0 }
             rs.lastAngle = angle
           }
         }
       } else {
         for (const side of ['Left', 'Right']) {
-          rollState[side].lastAngle      = null
-          rollState[side].cumAngle       = 0
-          rollState[side].startPalmFacing = null
+          rollState[side].lastAngle = null; rollState[side].cumAngle = 0; rollState[side].startPalmFacing = null
         }
       }
 
-      // ── 단일 손 엄지+검지+중지 3핀치 → 좌우 dismiss ──
       if (anyTriPinch) {
         if (wasPinching) { handState.snap = true; wasPinching = false }
         lastZoomDist = null; lastScrollMidY = null; lastIndexY = null; tapFired = false
         doubleTapCount = 0; pinchMoveAccum = 0
         handState.activePinch = false; handState.dx = 0; handState.fingerX = -1
         handState.zoomDelta = 0; wasZoomPinching = false; wasBothScrollPinching = false
-        handState.dismissDragXActive = true
-        handState.dismissActive      = false
+        handState.dismissDragXActive = true; handState.dismissActive = false
 
-        // 오른손(MediaPipe 'Left') — 좌·우 양방향 허용
         if (rightTriPinch) {
           const lm = triPinchHands['Left'].lm
-          const mx = 1 - lm[0].x  // 미러 보정 손목 X
+          const mx = 1 - lm[0].x
           if (lastTriPinchX.Left !== null) {
             const dx = mx - lastTriPinchX.Left
             if (Math.abs(dx) > DX_DEAD_ZONE) {
@@ -483,20 +443,9 @@ export default function HandTracker() {
             }
           }
           lastTriPinchX.Left = mx
-          drawHand(lm, ctx, W, H, true, isDark, null)
-          {
-            const ptX = i => (1 - lm[i].x) * W
-            const ptY = i => lm[i].y * H
-            const cx = (ptX(4) + ptX(8) + ptX(12)) / 3
-            const cy = (ptY(4) + ptY(8) + ptY(12)) / 3
-            ctx.fillStyle = isDark ? 'rgba(230,230,230,0.92)' : 'rgba(25,25,25,0.92)'
-            ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI * 2); ctx.fill()
-          }
-        } else {
-          lastTriPinchX.Left = null
-        }
+          { const _oi = gestureOrigIdx[triPinchHands['Left'].idx]; ds.handModes[_oi] = 'active'; ds.triPinchCircles.push(_oi) }
+        } else { lastTriPinchX.Left = null }
 
-        // 왼손(MediaPipe 'Right') — 좌·우 양방향 허용
         if (leftTriPinch) {
           const lm = triPinchHands['Right'].lm
           const mx = 1 - lm[0].x
@@ -510,42 +459,19 @@ export default function HandTracker() {
             }
           }
           lastTriPinchX.Right = mx
-          drawHand(lm, ctx, W, H, true, isDark, null)
-          {
-            const ptX = i => (1 - lm[i].x) * W
-            const ptY = i => lm[i].y * H
-            const cx = (ptX(4) + ptX(8) + ptX(12)) / 3
-            const cy = (ptY(4) + ptY(8) + ptY(12)) / 3
-            ctx.fillStyle = isDark ? 'rgba(230,230,230,0.92)' : 'rgba(25,25,25,0.92)'
-            ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI * 2); ctx.fill()
-          }
-        } else {
-          lastTriPinchX.Right = null
-        }
+          { const _oi = gestureOrigIdx[triPinchHands['Right'].idx]; ds.handModes[_oi] = 'active'; ds.triPinchCircles.push(_oi) }
+        } else { lastTriPinchX.Right = null }
 
-      // ── 양손 엄지+검지 핀치 → 줌 모드 ──
       } else if (bothZoomPinch) {
         lastTriPinchX.Left = null; lastTriPinchX.Right = null
-        handState.dismissDragXActive = false
-        handState.dismissActive      = false
-        gestureLms.forEach((lm, i) => drawHand(lm, ctx, W, H, true, isDark, null))
-        const p0 = drawPinchDot(gestureLms[0], 4, 8, ctx, W, H, isDark)
-        const p1 = drawPinchDot(gestureLms[1], 4, 8, ctx, W, H, isDark)
-
-        ctx.strokeStyle = isDark ? 'rgba(210,210,210,0.5)' : 'rgba(40,40,40,0.45)'
-        ctx.lineWidth   = 1
-        ctx.setLineDash([5, 5])
-        ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke()
-        ctx.setLineDash([])
-
+        handState.dismissDragXActive = false; handState.dismissActive = false
+        gestureOrigIdx.forEach(oi => { ds.handModes[oi] = 'active'; ds.pinchDots.push({ handIdx: oi, a: 4, b: 8, color: null }) })
+        ds.pinchLine = { showActive: true }
         const zoomDist = Math.hypot(zoomInfos[0].midX - zoomInfos[1].midX, zoomInfos[0].midY - zoomInfos[1].midY)
-        if (lastZoomDist !== null) {
-          handState.zoomDelta = (zoomDist - lastZoomDist) * ZOOM_SENS
-        }
+        if (lastZoomDist !== null) handState.zoomDelta = (zoomDist - lastZoomDist) * ZOOM_SENS
         lastZoomDist = zoomDist
         handState.bothZoomActive = true
         handState.zoomMidY = (zoomInfos[0].midY + zoomInfos[1].midY) / 2
-
         if (wasPinching) { handState.snap = true }
         wasPinching = false; wasZoomPinching = true; wasBothScrollPinching = false
         doubleTapCount = 0; pinchMoveAccum = 0
@@ -554,240 +480,230 @@ export default function HandTracker() {
 
       } else {
         lastTriPinchX.Left = null; lastTriPinchX.Right = null
-        lastZoomDist             = null
-        handState.zoomDelta      = 0
-        wasZoomPinching          = false
-        handState.bothZoomActive = false
-        handState.zoomMidY       = 0
+        lastZoomDist = null; handState.zoomDelta = 0
+        wasZoomPinching = false; handState.bothZoomActive = false; handState.zoomMidY = 0
 
         const scrollActive     = scrollInfos.findIndex(p => p.activePinch)
         const activePinchCount = scrollInfos.filter(s => s.activePinch).length
         const bothScrollPinch  = gestureLms.length >= 2 && activePinchCount >= 2
 
         if (bothScrollPinch) {
-          // ── 양손 엄지+중지 핀치 → 카드 수직 드래그 (dismiss / restore) ──
           const activePinches = scrollInfos.filter(s => s.activePinch)
-          const xSpread       = Math.abs(activePinches[0].midX - activePinches[1].midX) > 0.15
-          const avgMidY       = (activePinches[0].midY + activePinches[1].midY) / 2
-          const inBand        = avgMidY > 0.20 && avgMidY < 0.80
-          const dismissValid  = xSpread && inBand  // dismiss(하향)은 위치 제약 유지
-          // 카드가 이미 사라진 상태(복귀 대기)면 어디서든 bright, 그 외엔 유효 dismiss 위치일 때만
-          const showActive    = dismissValid || handState.dismissed
-
+          const xSpread      = Math.abs(activePinches[0].midX - activePinches[1].midX) > 0.15
+          const avgMidY      = (activePinches[0].midY + activePinches[1].midY) / 2
+          const inBand       = avgMidY > 0.20 && avgMidY < 0.80
+          const dismissValid = xSpread && inBand
+          const showActive   = dismissValid || handState.dismissed
           lastIndexY = null; tapFired = false; lastX = null
           if (wasPinching) { handState.snap = true; wasPinching = false }
           wasBothScrollPinching = true
-          handState.activePinch       = false; handState.dx = 0; handState.fingerX = -1
-          handState.dismissActive      = showActive  // 유효 위치이거나 이미 dismissed → 제스처 유지 신호
-          handState.dismissDragXActive = false
-
-          gestureLms.forEach((lm, i) => drawHand(lm, ctx, W, H, showActive, isDark, null))
-          const pinchPts = []
-          scrollInfos.forEach((info, i) => {
-            if (info.activePinch) pinchPts.push(drawPinchDot(gestureLms[i], 4, 12, ctx, W, H, isDark))
-          })
-          if (pinchPts.length >= 2) {
-            // 복귀(상향) 또는 dismiss 위치 제약 충족 시 밝은 실선, 그 외 흐릿한 점선
-            ctx.strokeStyle = showActive
-              ? (isDark ? 'rgba(210,210,210,0.5)' : 'rgba(40,40,40,0.45)')
-              : (isDark ? 'rgba(210,210,210,0.18)' : 'rgba(40,40,40,0.18)')
-            ctx.lineWidth = 1; ctx.setLineDash([5, 5])
-            ctx.beginPath(); ctx.moveTo(pinchPts[0].x, pinchPts[0].y); ctx.lineTo(pinchPts[1].x, pinchPts[1].y); ctx.stroke()
-            ctx.setLineDash([])
-          }
-
+          handState.activePinch = false; handState.dx = 0; handState.fingerX = -1
+          handState.dismissActive = showActive; handState.dismissDragXActive = false
+          const _showA = showActive
+          gestureOrigIdx.forEach(oi => { ds.handModes[oi] = _showA ? 'active' : 'inactive' })
+          scrollInfos.forEach((info, j) => { if (info.activePinch) ds.pinchDots.push({ handIdx: gestureOrigIdx[j], a: 4, b: 12, color: null }) })
+          if (ds.pinchDots.length >= 2) ds.pinchLine = { showActive: _showA }
           if (lastScrollMidY !== null) {
             const dy = avgMidY - lastScrollMidY
-            if (Math.abs(dy) > DX_DEAD_ZONE) {
-              // 유효 위치(dismiss 시작) 또는 이미 dismissed(restore) 상태일 때 양방향 전달
-              if (dismissValid || handState.dismissed) handState.dismissDrag = dy
-            }
+            if (Math.abs(dy) > DX_DEAD_ZONE && (dismissValid || handState.dismissed)) handState.dismissDrag = dy
           }
           lastScrollMidY = avgMidY
 
         } else {
-          lastScrollMidY = null
-          wasBothScrollPinching = false
-          handState.dismissActive      = false
-          handState.dismissDragXActive = false
+          lastScrollMidY = null; wasBothScrollPinching = false
+          handState.dismissActive = false; handState.dismissDragXActive = false
 
-          // ── 검지 단독 → 탭 클릭 ──
           const inIndexMode = firstLmFist && scrollActive < 0 && isIndexOnly(firstLmFist) && handState.rotDx === 0
-
           if (inIndexMode) {
-            gestureLms.forEach((lm, i) => drawHand(lm, ctx, W, H, i === 0, isDark, null))
-            drawIndexTip(firstLmFist, ctx, W, H, tapFired, isDark)
-
+            gestureOrigIdx.forEach((oi, j) => { ds.handModes[oi] = j === 0 ? 'active' : 'inactive' })
+            const _firstNB = backZoneMask.findIndex(m => !m)
+            if (_firstNB >= 0) ds.indexTip = { handIdx: gestureOrigIdx[_firstNB], tapFired }
             handState.fingerX = 1 - firstLmFist[8].x
             handState.fingerY = firstLmFist[8].y
-
             const curY = firstLmFist[8].y
             if (lastIndexY !== null) {
               const dy = curY - lastIndexY
               if (dy > TAP_THRESHOLD && !tapFired) {
-                handState.click  = true
-                handState.clickX = 1 - firstLmFist[8].x
-                handState.clickY = firstLmFist[8].y
+                handState.click = true; handState.clickX = 1 - firstLmFist[8].x; handState.clickY = firstLmFist[8].y
                 tapFired = true
-              } else if (dy < -0.01) {
-                tapFired = false
-              }
+              } else if (dy < -0.01) { tapFired = false }
             }
             lastIndexY = curY
-
-            handState.activePinch = false
-            handState.dx = 0
+            handState.activePinch = false; handState.dx = 0
             if (wasPinching) { handState.snap = true; wasPinching = false }
             lastX = null
 
           } else {
-            // ── 엄지+중지 핀치 → 스크롤 모드 ──
-            lastIndexY = null; tapFired = false
-            handState.fingerX = -1
-
-            gestureLms.forEach((lm, i) => drawHand(lm, ctx, W, H, scrollInfos[i].activePinch || backInfos[i].activePinch, isDark, null))
-            scrollInfos.forEach((info, i) => {
-              if (info.activePinch) drawPinchDot(gestureLms[i], 4, 12, ctx, W, H, isDark)
-            })
-            backInfos.forEach((info, i) => {
-              if (info.activePinch) drawPinchDot(gestureLms[i], 4, 8, ctx, W, H, isDark, handState.indexPinchColor)
-            })
+            lastIndexY = null; tapFired = false; handState.fingerX = -1
+            const _picColor = handState.indexPinchColor
+            for (let j = 0; j < gestureLms.length; j++) {
+              const oi = gestureOrigIdx[j]
+              ds.handModes[oi] = (scrollInfos[j].activePinch || backInfos[j].activePinch) ? 'active' : 'inactive'
+              if (scrollInfos[j].activePinch) ds.pinchDots.push({ handIdx: oi, a: 4, b: 12, color: null })
+              if (backInfos[j].activePinch)   ds.pinchDots.push({ handIdx: oi, a: 4, b: 8,  color: _picColor })
+            }
 
             const activeLm = scrollActive >= 0 ? gestureLms[scrollActive] : null
             handState.activePinch = !!activeLm
-
             if (activeLm) {
               const mirroredX = 1 - activeLm[0].x
-              if (!wasPinching) pinchMoveAccum = 0  // 새 핀치 시작 시 초기화
+              if (!wasPinching) pinchMoveAccum = 0
               if (lastX !== null) {
                 const raw = mirroredX - lastX
-                if (Math.abs(raw) > DX_DEAD_ZONE) {
-                  handState.dx = raw * HAND_SENS
-                  pinchMoveAccum += Math.abs(raw)
-                } else {
-                  handState.dx = 0
-                }
+                if (Math.abs(raw) > DX_DEAD_ZONE) { handState.dx = raw * HAND_SENS; pinchMoveAccum += Math.abs(raw) }
+                else handState.dx = 0
               }
               lastX = mirroredX
               const sInfo = scrollInfos[scrollActive]
-              handState.pinchMidX = 1 - sInfo.midX
-              handState.pinchMidY = sInfo.midY
+              handState.pinchMidX = 1 - sInfo.midX; handState.pinchMidY = sInfo.midY
             } else {
               if (wasPinching) {
                 handState.snap = true
-                // 엄지+중지 더블탭 → 뒤로가기 (스크롤 이동이 적을 때만)
                 if (pinchMoveAccum < BACK_MOVE_THRESHOLD) {
                   if (doubleTapCount === 1 && (frameCount - doubleTapFrame) < BACK_DBL_FRAMES) {
-                    handState.back = true
-                    doubleTapCount = 0
-                  } else {
-                    doubleTapCount = 1
-                    doubleTapFrame = frameCount
-                  }
+                    handState.back = true; doubleTapCount = 0
+                  } else { doubleTapCount = 1; doubleTapFrame = frameCount }
                 }
                 pinchMoveAccum = 0
               }
-              // 더블탭 카운트 타임아웃
-              if (!wasPinching && doubleTapCount > 0 && (frameCount - doubleTapFrame) > BACK_DBL_FRAMES) {
-                doubleTapCount = 0
-              }
-              lastX = null; handState.dx = 0
-              handState.pinchMidX = 0; handState.pinchMidY = 0
+              if (!wasPinching && doubleTapCount > 0 && (frameCount - doubleTapFrame) > BACK_DBL_FRAMES) doubleTapCount = 0
+              lastX = null; handState.dx = 0; handState.pinchMidX = 0; handState.pinchMidY = 0
             }
-
             wasPinching = !!activeLm
           }
         }
       }
 
       // ── 손등 주먹 3초 유지 → 잠금 토글 (메인 페이지에서만) ──
-
       if (locationRef.current !== '/') {
-        // 메인 페이지가 아니면 항상 언락 상태 유지
-        handState.leftLocked        = false
-        handState.rightLocked       = false
-        handState.leftLockProgress  = 0
-        handState.rightLockProgress = 0
-        for (const side of ['Left', 'Right']) {
-          lockState[side].holdFrames = 0
-          lockState[side].missFrames = 0
-        }
+        handState.leftLocked = false; handState.rightLocked = false
+        handState.leftLockProgress = 0; handState.rightLockProgress = 0
+        for (const side of ['Left', 'Right']) { lockState[side].holdFrames = 0; lockState[side].missFrames = 0 }
       } else {
-        // 재발동 방지 쿨다운
-        for (const side of ['Left', 'Right']) {
-          if (lockState[side].cooldown > 0) lockState[side].cooldown--
-        }
-
+        for (const side of ['Left', 'Right']) { if (lockState[side].cooldown > 0) lockState[side].cooldown-- }
         for (let hi = 0; hi < lms.length; hi++) {
           const lm   = lms[hi]
           const side = handedness[hi]?.[0]?.categoryName
           if (!side || !lockState[side]) continue
-          if (isInHandBackZone(lm, side)) continue  // 손등 ±20° 구간 — 잠금 제스처도 차단
-
-          const ls  = lockState[side]
+          if (isInHandBackZone(lm, side)) continue
+          const ls = lockState[side]
           const key = side === 'Left' ? 'leftLocked' : 'rightLocked'
           ls.lastSeenFrame = frameCount
-
-          // 완전한 주먹 + 손바닥이 카메라를 향함
-          const isGesture = isFistClosed(lm) && isPalmFacing(lm, side)
-          const progressKey = side === 'Left' ? 'leftLockProgress'  : 'rightLockProgress'
-          const flashKey    = side === 'Left' ? 'leftLockFlash'     : 'rightLockFlash'
-
+          const isGesture   = isFistClosed(lm) && isPalmFacing(lm, side)
+          const progressKey = side === 'Left' ? 'leftLockProgress' : 'rightLockProgress'
+          const flashKey    = side === 'Left' ? 'leftLockFlash'    : 'rightLockFlash'
           if (isGesture && ls.cooldown === 0) {
-            ls.holdFrames++
-            ls.missFrames = 0
+            ls.holdFrames++; ls.missFrames = 0
             handState[progressKey] = Math.min(ls.holdFrames / FIST_HOLD_FRAMES, 1)
             if (ls.holdFrames >= FIST_HOLD_FRAMES) {
               const nowLocked = !handState[key]
-              handState[key]         = nowLocked
-              handState[flashKey]    = nowLocked ? 'lock' : 'unlock'
-              handState[progressKey] = 0
-              ls.cooldown   = FLASH_FRAMES
-              ls.holdFrames = 0
+              handState[key] = nowLocked; handState[flashKey] = nowLocked ? 'lock' : 'unlock'
+              handState[progressKey] = 0; ls.cooldown = FLASH_FRAMES; ls.holdFrames = 0
             }
           } else {
-            // 5프레임 연속 미감지 시에만 리셋 (노이즈 1~2프레임은 무시)
             ls.missFrames++
-            if (ls.missFrames >= 3) {
-              handState[progressKey] = 0
-              ls.holdFrames = 0
-              ls.missFrames = 0
-            }
+            if (ls.missFrames >= 3) { handState[progressKey] = 0; ls.holdFrames = 0; ls.missFrames = 0 }
           }
         }
-
-        // 이번 프레임에 감지되지 않은 손: missFrames 증가 → 게이지 초기화
         for (const side of ['Left', 'Right']) {
           const ls = lockState[side]
           if (ls.lastSeenFrame !== frameCount && ls.holdFrames > 0) {
             ls.missFrames++
             if (ls.missFrames >= 3) {
               const progressKey = side === 'Left' ? 'leftLockProgress' : 'rightLockProgress'
-              handState[progressKey] = 0
-              ls.holdFrames = 0
-              ls.missFrames = 0
+              handState[progressKey] = 0; ls.holdFrames = 0; ls.missFrames = 0
             }
           }
         }
-
-        // 비활성 자동 잠금 (1분간 손 미감지)
         for (const side of ['Left', 'Right']) {
           const key = side === 'Left' ? 'leftLocked' : 'rightLocked'
-          if (!handState[key] && frameCount - lockState[side].lastSeenFrame > INACTIVITY_FRAMES) {
-            handState[key] = true
-          }
+          if (!handState[key] && frameCount - lockState[side].lastSeenFrame > INACTIVITY_FRAMES) handState[key] = true
         }
       }
 
+      drawState = ds  // RAF 드로잉에서 사용
+    }
+
+    // public/ 경로의 Classic Worker — Vite 변환 없음, importScripts 정상 동작
+    const worker = new Worker(import.meta.env.BASE_URL + 'handTracker-worker.js')
+
+    worker.onmessage = (e) => {
+      if (e.data.type === 'READY') {
+        workerReady = true
+        console.log('[HandTracker] Worker ready')
+      } else if (e.data.type === 'RESULT') {
+        onWorkerResult(e.data)
+      } else if (e.data.type === 'ERROR') {
+        console.error('[HandTracker] Worker init error:', e.data.error)
+        workerBusy = false
+      }
+    }
+
+    worker.onerror = (err) => {
+      console.error('[HandTracker] Worker error:', err.message, err)
+      workerBusy = false
+    }
+
+    // detect(): 60fps 캔버스 렌더링 + workerBusy 자연 속도 제한
+    function detect(ts) {
+      rafId = requestAnimationFrame(detect)
+
+      // 60fps 캔버스 렌더링: 이전↔현재 랜드마크 사이를 보간하여 부드러운 스켈레톤
+      const canvas = canvasRef.current
+      if (canvas) {
+        const W = window.innerWidth
+        const H = window.innerHeight
+        if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H }
+        const ctx = canvas.getContext('2d')
+        ctx.clearRect(0, 0, W, H)
+        if (drawState && curLms) {
+          const isDark = document.documentElement.classList.contains('dark')
+          drawFrame(ctx, W, H, isDark, curLms, drawState)
+        }
+      }
+
+      const video = videoRef.current
+      if (!video || video.readyState < 2 || !workerReady || workerBusy) return
+
+      // 현재 영상 프레임 캡처 (동기, < 0.5ms)
+      captureCtx.drawImage(video, 0, 0, 320, 240)
+      const bitmap = captureCanvas.transferToImageBitmap()
+
+      workerBusy = true
+      worker.postMessage({ type: 'DETECT', bitmap, timestamp: ts }, [bitmap])
+    }
+
+    async function init() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: 640, height: 480 },
+        })
+        if (!videoRef.current) return
+        videoRef.current.srcObject = stream
+        // loadedmetadata 대기 후 play() — AbortError(이중 마운트) 방지
+        await new Promise(res => {
+          if (videoRef.current.readyState >= 1) return res()
+          videoRef.current.addEventListener('loadedmetadata', res, { once: true })
+        })
+        if (!videoRef.current) return
+        await videoRef.current.play()
+        rafId = requestAnimationFrame(detect)
+      } catch (err) {
+        console.warn('[HandTracker] 카메라 초기화 실패:', err)
+      }
     }
 
     init()
 
     return () => {
       cancelAnimationFrame(rafId)
+      worker.terminate()
       videoRef.current?.srcObject?.getTracks().forEach(t => t.stop())
-      landmarker?.close()
-      Object.assign(handState, { dx: 0, snap: false, activePinch: false, active: false, zoomDelta: 0, click: false, back: false, rotDx: 0, dismissDrag: 0, fingerX: -1, fingerY: 0 })
+      Object.assign(handState, {
+        dx: 0, snap: false, activePinch: false, active: false,
+        zoomDelta: 0, click: false, back: false, rotDx: 0,
+        dismissDrag: 0, fingerX: -1, fingerY: 0,
+      })
     }
   }, [])
 
