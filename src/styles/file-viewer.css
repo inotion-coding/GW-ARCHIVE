@@ -372,11 +372,6 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 0;
   scrollbar-width: none;
 }
 .fv-pdf-pages::-webkit-scrollbar { display: none; }

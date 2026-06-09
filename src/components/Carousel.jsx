@@ -140,7 +140,9 @@ export default function Carousel() {
       const W = window.innerWidth
       if (dismissed && (Math.abs(dismissY) > H * 0.6 || Math.abs(dismissX) > W * 0.6)) {
         handState.dx = 0; handState.snap = false
-        handState.click = false; handState.zoomDelta = 0
+        handState.click = false
+        // dismissDir === 'left'이면 파일 뷰어가 열린 상태 → FileViewerCore가 zoomDelta를 처리
+        if (dismissDir !== 'left') handState.zoomDelta = 0
       }
 
       if (handState.active) {

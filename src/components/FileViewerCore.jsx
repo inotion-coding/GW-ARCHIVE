@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, memo } from 'react'
+import { useState, useRef, useCallback, useEffect, useLayoutEffect, memo } from 'react'
 import { processFile, ACCEPT, EXT_LABEL } from '../utils/fileProcessor'
 import handState from '../utils/handState'
 import 'highlight.js/styles/atom-one-dark.css'
@@ -76,11 +76,15 @@ function PdfViewer({ url, zoom = 1 }) {
   useEffect(() => {
     let rafId
     function poll() {
-      const active  = handState.indexPinchActive
-      const px      = handState.indexPinchMidX
-      const py      = handState.indexPinchMidY
-      const zooming = handState.bothZoomActive
-      if (!zooming && active && px > 0.30) {
+      const viewerOpen  = handState.dismissed && handState.dismissDir === 'left'
+      const zooming     = handState.bothZoomActive
+      // 엄지+검지(indexPinch) 또는 엄지+중지(activePinch) 모두 지원
+      const useIndex    = handState.indexPinchActive
+      const useScroll   = !useIndex && handState.activePinch
+      const active      = useIndex || useScroll
+      const px          = useIndex ? handState.indexPinchMidX : handState.pinchMidX
+      const py          = useIndex ? handState.indexPinchMidY : handState.pinchMidY
+      if (viewerOpen && !zooming && active && px > 0.30) {
         if (lastPinchYRef.current !== null) {
           const dy = py - lastPinchYRef.current
           if (containerRef.current) containerRef.current.scrollTop += dy * window.innerHeight * 2.2
@@ -95,15 +99,30 @@ function PdfViewer({ url, zoom = 1 }) {
     return () => cancelAnimationFrame(rafId)
   }, [])
 
+  // 스크롤 spacer 계산: transform이 레이아웃을 바꾸지 않으므로 직접 보정
+  const pageH  = vp1Ref.current && fitScale ? vp1Ref.current.height * fitScale : 0
+  const totalH = numPages > 0 && pageH > 0
+    ? numPages * pageH + (numPages - 1) * 8 + 16   // gap 8 × (n-1) + padding 8×2
+    : 0
+
   return (
     <div ref={containerRef} className="fv-pdf-pages">
       {!fitScale || numPages === 0
         ? <span className="fv-pdf-loading">Loading…</span>
-        : <div style={{ zoom }}>
-            {Array.from({ length: numPages }, (_, i) => (
-              <PdfPage key={i} pdfDoc={pdfDoc} pageNum={i + 1} fitScale={fitScale} />
-            ))}
-          </div>
+        : <>
+            <div style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+              gap: '8px', padding: '8px 0',
+              transform: `scale(${zoom})`, transformOrigin: 'top center',
+            }}>
+              {Array.from({ length: numPages }, (_, i) => (
+                <PdfPage key={i} pdfDoc={pdfDoc} pageNum={i + 1} fitScale={fitScale} />
+              ))}
+            </div>
+            {zoom > 1 && totalH > 0 && (
+              <div style={{ height: `${totalH * (zoom - 1)}px` }} />
+            )}
+          </>
       }
     </div>
   )
@@ -164,6 +183,8 @@ export default function FileViewerCore() {
   activeIdxRef.current   = activeIdx
   const renderedScrollRef = useRef(null)
   const renderedLastYRef  = useRef(null)
+  const textInnerRef      = useRef(null)
+  const [textH, setTextH] = useState(0)
 
   const inputRef         = useRef(null)
   const urlsRef          = useRef([])
@@ -180,19 +201,29 @@ export default function FileViewerCore() {
     contentZoomRef.current = 1
     if (renderedScrollRef.current) renderedScrollRef.current.scrollTop = 0
     renderedLastYRef.current = null
+    setTextH(0)
   }, [activeIdx])
+
+  // 텍스트·문서 자연 높이 측정 (transform spacer 계산용)
+  useLayoutEffect(() => {
+    if (textInnerRef.current) setTextH(textInnerRef.current.offsetHeight)
+  })
 
   // 텍스트·문서 파일 핀치 스크롤 RAF (이미지·오디오·비디오·PDF 제외)
   useEffect(() => {
     const SCROLL_TYPES = new Set(['image', 'video', 'audio', 'pdf'])
     let rafId
     function poll() {
+      const viewerOpen = handState.dismissed && handState.dismissDir === 'left'
       const file    = filesRef.current[activeIdxRef.current]
-      const isText  = file && !SCROLL_TYPES.has(file.type)
-      const active  = handState.indexPinchActive
-      const px      = handState.indexPinchMidX
-      const py      = handState.indexPinchMidY
+      const isText  = viewerOpen && file && !SCROLL_TYPES.has(file.type)
       const zooming = handState.bothZoomActive
+      // 엄지+검지(indexPinch) 또는 엄지+중지(activePinch) 모두 지원
+      const useIndex  = handState.indexPinchActive
+      const useScroll = !useIndex && handState.activePinch
+      const active    = useIndex || useScroll
+      const px        = useIndex ? handState.indexPinchMidX : handState.pinchMidX
+      const py        = useIndex ? handState.indexPinchMidY : handState.pinchMidY
       if (isText && !zooming && active && px > 0.30) {
         const el = renderedScrollRef.current
         if (el && renderedLastYRef.current !== null) {
@@ -208,11 +239,12 @@ export default function FileViewerCore() {
     return () => cancelAnimationFrame(rafId)
   }, [])
 
-  // 모든 파일 타입 줌 RAF (PDF 포함)
+  // 모든 파일 타입 줌 RAF — 파일 뷰어가 열려 있을 때만 zoomDelta 소비
   useEffect(() => {
     let rafId
     function poll() {
-      if (handState.zoomDelta !== 0 && handState.bothZoomActive) {
+      const viewerOpen = handState.dismissed && handState.dismissDir === 'left'
+      if (viewerOpen && handState.zoomDelta !== 0 && handState.bothZoomActive) {
         const next = Math.max(1, Math.min(4, contentZoomRef.current + handState.zoomDelta * 3))
         contentZoomRef.current = next
         setContentZoom(next)
@@ -397,13 +429,16 @@ export default function FileViewerCore() {
                       <FileContent file={active} zoom={contentZoom} />
                     </div>
                   )
-                  /* 텍스트·문서: zoom 속성을 스크롤 컨테이너 내부에 적용 → 확대 시 스크롤 범위 증가 */
+                  /* 텍스트·문서: transform + spacer → 확대 시 스크롤 범위 보정 */
                   : !['pdf'].includes(active.type)
                     ? (
-                      <div ref={renderedScrollRef} style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-                        <div style={{ zoom: contentZoom }}>
+                      <div ref={renderedScrollRef} style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0 }}>
+                        <div ref={textInnerRef} style={{ transform: `scale(${contentZoom})`, transformOrigin: 'top left' }}>
                           <FileContent file={active} zoom={contentZoom} />
                         </div>
+                        {contentZoom > 1 && textH > 0 && (
+                          <div style={{ height: `${textH * (contentZoom - 1)}px` }} />
+                        )}
                       </div>
                     )
                   /* PDF: zoom은 PdfViewer 내부 스크롤 컨테이너 안에서 처리 */
