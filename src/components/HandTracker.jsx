@@ -232,16 +232,9 @@ export default function HandTracker() {
     let workerBusy     = false
     let useVideoFrame  = false  // MediaStreamTrackProcessor 파이프라인 활성화 여부
     let videoStream    = null   // 워커 준비 전 스트림 보관용
-    let drawState   = null
-    let curLms      = null
-    let prevLms     = null
-    let lmsTime     = 0
-    let lmsInterval = 50
-    // 보간 프레임마다 랜드마크 객체를 새로 생성하지 않도록 미리 할당
-    const lerpBuf = [
-      Array.from({length: 21}, () => ({x: 0, y: 0, z: 0})),
-      Array.from({length: 21}, () => ({x: 0, y: 0, z: 0})),
-    ]
+    let drawState = null
+    let curLms    = null
+    let dispLms   = null  // EMA 스무딩된 렌더링 전용 랜드마크
 
     let lastX              = null
     let wasPinching        = false
@@ -285,12 +278,30 @@ export default function HandTracker() {
     // Worker에서 추론 결과가 도착하면 호출 — 메인 스레드에서 실행되지만 RAF 밖에서 비동기 실행
     function onWorkerResult({ landmarks: lms, handedness }) {
       workerBusy = false
-      prevLms = curLms
-      const t = performance.now()
-      if (lmsTime > 0) lmsInterval = Math.max(16, t - lmsTime)
-      lmsTime = t
       curLms    = lms
       drawState = null
+
+      // 렌더링 전용 EMA 스무딩: α(속도) — 정지 시 α≈0.25(안정), 이동 시 α≈0.90(반응)
+      if (lms.length === 0) {
+        dispLms = null
+      } else if (!dispLms || dispLms.length !== lms.length) {
+        dispLms = lms.map(h => h.map(p => ({ x: p.x, y: p.y, z: p.z })))
+      } else {
+        for (let hi = 0; hi < lms.length; hi++) {
+          let sq = 0
+          for (let i = 0; i < 21; i++) {
+            const dx = lms[hi][i].x - dispLms[hi][i].x
+            const dy = lms[hi][i].y - dispLms[hi][i].y
+            sq += dx * dx + dy * dy
+          }
+          const alpha = 0.25 + 0.65 * Math.min(1, Math.sqrt(sq / 21) / 0.010)
+          for (let i = 0; i < 21; i++) {
+            dispLms[hi][i].x = alpha * lms[hi][i].x + (1 - alpha) * dispLms[hi][i].x
+            dispLms[hi][i].y = alpha * lms[hi][i].y + (1 - alpha) * dispLms[hi][i].y
+            dispLms[hi][i].z = alpha * lms[hi][i].z + (1 - alpha) * dispLms[hi][i].z
+          }
+        }
+      }
 
       if (lms.length === 0) {
         if (wasPinching) { handState.snap = true; wasPinching = false }
@@ -685,24 +696,9 @@ export default function HandTracker() {
         if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H }
         const ctx = canvas.getContext('2d')
         ctx.clearRect(0, 0, W, H)
-        if (drawState && curLms) {
+        if (drawState && dispLms) {
           const isDark = document.documentElement.classList.contains('dark')
-          let drawLms = curLms
-          if (prevLms && prevLms.length === curLms.length && curLms.length > 0) {
-            // +0.5 기저: 검출 파이프라인 지연(~50ms) 보상 — 항상 이전→현재 속도의 50%+ 앞을 예측
-            const extraT = Math.min(0.9, (performance.now() - lmsTime) / lmsInterval + 0.5)
-            const n = curLms.length
-            for (let hi = 0; hi < n; hi++) {
-              const cl = curLms[hi], pl = prevLms[hi], buf = lerpBuf[hi]
-              for (let i = 0; i < 21; i++) {
-                buf[i].x = cl[i].x + (cl[i].x - pl[i].x) * extraT
-                buf[i].y = cl[i].y + (cl[i].y - pl[i].y) * extraT
-                buf[i].z = cl[i].z + (cl[i].z - pl[i].z) * extraT
-              }
-            }
-            drawLms = n === 1 ? [lerpBuf[0]] : lerpBuf
-          }
-          drawFrame(ctx, W, H, isDark, drawLms, drawState)
+          drawFrame(ctx, W, H, isDark, dispLms, drawState)
         }
       }
 
