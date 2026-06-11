@@ -717,7 +717,8 @@ export default function HandTracker() {
     async function init() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: 640, height: 480 },
+          // frameRate 상한 30 — 고프레임 웹캠에서 불필요한 추론·렌더 부하 방지
+          video: { facingMode: 'user', width: 640, height: 480, frameRate: { ideal: 30, max: 30 } },
         })
         if (!videoRef.current) return
         videoRef.current.srcObject = stream

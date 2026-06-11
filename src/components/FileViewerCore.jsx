@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useLayoutEffect, memo, forwardRef, useImperativeHandle } from 'react'
 import { processFile, ACCEPT, EXT_LABEL } from '../utils/fileProcessor'
+import { saveFile, getAllFiles, deleteFile } from '../utils/fileStore'
 import handState from '../utils/handState'
 import 'highlight.js/styles/atom-one-dark.css'
 import * as pdfjsLib from 'pdfjs-dist'
@@ -8,6 +9,11 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url
 ).href
 
+// ── 렌더 화질 배율: 화면 픽셀 밀도(레티나 등)에 맞춰 선명하게.
+//    fitScale(=CSS 표시 크기)에 이 배율을 곱해 캔버스 내부 해상도를 높인다.
+//    줌(최대 4배) 시 흐려짐도 완화하기 위해 최소 2배 보장, 메모리 고려해 3.5배 상한.
+const PDF_RENDER_SCALE = Math.min(3.5, Math.max(2, window.devicePixelRatio || 1))
+
 // ── PDF 페이지 단위 렌더러 (memo: fitScale/pdfDoc 변경 시에만 재렌더)
 const PdfPage = memo(function PdfPage({ pdfDoc, pageNum, fitScale }) {
   const canvasRef = useRef(null)
@@ -15,15 +21,17 @@ const PdfPage = memo(function PdfPage({ pdfDoc, pageNum, fitScale }) {
     if (!pdfDoc || !canvasRef.current || !fitScale) return
     let task = null
     ;(async () => {
-      const page     = await pdfDoc.getPage(pageNum)
-      const viewport = page.getViewport({ scale: fitScale * 1.5 })
-      const canvas   = canvasRef.current
+      const page        = await pdfDoc.getPage(pageNum)
+      const cssViewport = page.getViewport({ scale: fitScale })
+      const viewport    = page.getViewport({ scale: fitScale * PDF_RENDER_SCALE })
+      const canvas      = canvasRef.current
       if (!canvas) return
-      canvas.width        = viewport.width
-      canvas.height       = viewport.height
-      canvas.style.width  = `${viewport.width / 1.5}px`
-      canvas.style.height = `${viewport.height / 1.5}px`
-      task = page.render({ canvasContext: canvas.getContext('2d'), viewport })
+      canvas.width        = Math.floor(viewport.width)
+      canvas.height       = Math.floor(viewport.height)
+      canvas.style.width  = `${Math.floor(cssViewport.width)}px`
+      canvas.style.height = `${Math.floor(cssViewport.height)}px`
+      const ctx = canvas.getContext('2d', { alpha: false })
+      task = page.render({ canvasContext: ctx, viewport })
       await task.promise
     })()
     return () => { task?.cancel?.() }
@@ -328,13 +336,40 @@ export default function FileViewerCore() {
     return () => urls.forEach(u => URL.revokeObjectURL(u))
   }, [])
 
+  // ── 새로고침 후 IndexedDB에 저장된 파일 복원
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const stored = await getAllFiles()
+      if (cancelled || !stored.length) return
+      setLoading(true)
+      const restored = await Promise.all(stored.map(async (s) => {
+        const file = new File([s.blob], s.name)
+        const r    = await processFile(file)
+        if (r.url) urlsRef.current.push(r.url)
+        return { ...r, _id: s.id }
+      }))
+      if (cancelled) return
+      setFiles(restored)
+      setActiveIdx(restored.length - 1)
+      setLoading(false)
+    })()
+    return () => { cancelled = true }
+  }, [])
+
   const handleFiles = useCallback(async (fileList) => {
     if (!fileList?.length) return
     setLoading(true)
-    const results = await Promise.all(Array.from(fileList).map(processFile))
-    results.forEach(r => { if (r.url) urlsRef.current.push(r.url) })
+    const originals = Array.from(fileList)
+    const results   = await Promise.all(originals.map(processFile))
+    const withIds   = results.map((r) => {
+      if (r.url) urlsRef.current.push(r.url)
+      return { ...r, _id: `${Date.now()}-${Math.random().toString(36).slice(2)}` }
+    })
+    // 원본 파일을 IndexedDB에 저장 (새로고침 후 복원용)
+    await Promise.all(withIds.map((r, i) => saveFile(r._id, originals[i])))
     setFiles(prev => {
-      const next = [...prev, ...results]
+      const next = [...prev, ...withIds]
       setActiveIdx(next.length - 1)
       return next
     })
@@ -351,6 +386,7 @@ export default function FileViewerCore() {
     setFiles(prev => {
       const f = prev[idx]
       if (f?.url) URL.revokeObjectURL(f.url)
+      if (f?._id) deleteFile(f._id)  // IndexedDB에서도 제거
       const next = prev.filter((_, i) => i !== idx)
       setActiveIdx(Math.max(0, Math.min(activeIdx, next.length - 1)))
       return next
