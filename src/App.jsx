@@ -11,6 +11,9 @@ import CalendarPage from './pages/CalendarPage'
 import SchedulePage from './pages/SchedulePage'
 import MegastudyPage from './pages/MegastudyPage'
 import WeatherPage from './pages/WeatherPage'
+import ClockPage from './pages/ClockPage'
+import DdayPage from './pages/DdayPage'
+import WelcomePage from './pages/WelcomePage'
 import CalendarView from './components/CalendarView'
 import './styles/motion-page.css'
 
@@ -31,8 +34,11 @@ export default function App() {
             <Footer />
           </>
         } />
+        <Route path="/motion/1"   element={<WelcomePage />} />
         <Route path="/motion/4"   element={<WeatherPage />} />
+        <Route path="/motion/5"   element={<ClockPage />} />
         <Route path="/motion/6"   element={<MegastudyPage />} />
+        <Route path="/motion/7"   element={<DdayPage />} />
         <Route path="/motion/2"   element={<SchedulePage />} />
         <Route path="/motion/3"   element={<CalendarPage />} />
         <Route path="/motion/10"  element={<FileViewerPage />} />
