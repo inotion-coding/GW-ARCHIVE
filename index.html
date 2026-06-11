@@ -9,6 +9,15 @@
       rel="stylesheet"
     />
   <script>
+    /* 페인트 전 테마 선적용: 저장값 우선, 없으면 OS 기본 설정 */
+    (function() {
+      var stored = localStorage.getItem('theme')
+      var dark = stored === 'dark' ||
+        (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches)
+      if (dark) document.documentElement.classList.add('dark')
+    })()
+  </script>
+  <script>
     (function(l) {
       if (l.search[1] === '/') {
         var decoded = l.search.slice(1).split('&').map(function(s) {

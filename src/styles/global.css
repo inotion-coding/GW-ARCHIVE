@@ -199,3 +199,42 @@ footer {
 .theme-toggle:hover {
   opacity: 1;
 }
+
+/* ── 인트로 스플래시 ── */
+.intro-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 44px 44px;
+  background-position: center center;
+  opacity: 1;
+  transition: opacity 0.7s ease;
+}
+
+.intro-splash--hide {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.intro-title {
+  font-family: 'Courier Prime', monospace;
+  font-size: 22px;
+  text-transform: uppercase;
+  letter-spacing: 0.5em;
+  color: var(--text);
+  /* 끝 글자 letter-spacing 보정 */
+  padding-left: 0.5em;
+  animation: introTitleIn 1s ease both;
+}
+
+@keyframes introTitleIn {
+  0%   { opacity: 0; letter-spacing: 0.9em; }
+  100% { opacity: 1; letter-spacing: 0.5em; }
+}

@@ -1,4 +1,5 @@
 import { Routes, Route } from 'react-router-dom'
+import Intro from './components/Intro'
 import Header from './components/Header'
 import Carousel from './components/Carousel'
 import FileViewer from './components/FileViewer'
@@ -16,6 +17,7 @@ import './styles/motion-page.css'
 export default function App() {
   return (
     <>
+      <Intro />
       <HandTracker />
       <Routes>
         <Route path="/" element={
