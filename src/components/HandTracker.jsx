@@ -222,6 +222,7 @@ function drawFrame(ctx, W, H, isDark, lms, ds) {
 export default function HandTracker() {
   const videoRef    = useRef(null)
   const canvasRef   = useRef(null)
+  const perfRef     = useRef(null)
   const location    = useLocation()
   const locationRef = useRef(location.pathname)
   locationRef.current = location.pathname
@@ -235,6 +236,7 @@ export default function HandTracker() {
     let drawState = null
     let curLms    = null
     let dispLms   = null  // EMA 스무딩된 렌더링 전용 랜드마크
+    let smoothPrevTs = -1e9  // 렌더 스무딩 dt 계산용 직전 RAF 타임스탬프
 
     let lastX              = null
     let wasPinching        = false
@@ -263,6 +265,28 @@ export default function HandTracker() {
     const captureCanvas = new OffscreenCanvas(320, 240)
     const captureCtx    = captureCanvas.getContext('2d')
 
+    // ── 성능 HUD ── 워커 추론 지표 + 렌더 fps. 'P' 키로 표시 토글.
+    const perf = { delegate: '…', infMs: 0, fps: 0, inputW: 0, renderFps: 0 }
+    let showPerf = localStorage.getItem('handPerf') !== '0'
+    let rfFrames = 0, rfLastMs = -1e9
+    function paintPerf() {
+      const el = perfRef.current
+      if (!el) return
+      el.style.display = showPerf ? 'block' : 'none'
+      if (!showPerf) return
+      el.textContent =
+        `${perf.delegate}  ·  추론 ${perf.infMs}ms (${perf.fps}fps)` +
+        `${perf.inputW ? ` · ${perf.inputW}px` : ''}  ·  렌더 ${perf.renderFps}fps`
+    }
+    function onPerfKey(e) {
+      if (e.key === 'p' || e.key === 'P') {
+        showPerf = !showPerf
+        localStorage.setItem('handPerf', showPerf ? '1' : '0')
+        paintPerf()
+      }
+    }
+    window.addEventListener('keydown', onPerfKey)
+
     function resetHandState() {
       handState.active            = false
       handState.activePinch       = false
@@ -281,28 +305,8 @@ export default function HandTracker() {
       curLms    = lms
       drawState = null
 
-      // 렌더링 전용 EMA 스무딩: α(속도) — 정지 시 α≈0.25(안정), 이동 시 α≈0.90(반응)
-      if (lms.length === 0) {
-        dispLms = null
-      } else if (!dispLms || dispLms.length !== lms.length) {
-        dispLms = lms.map(h => h.map(p => ({ x: p.x, y: p.y, z: p.z })))
-      } else {
-        for (let hi = 0; hi < lms.length; hi++) {
-          let sq = 0
-          for (let i = 0; i < 21; i++) {
-            const dx = lms[hi][i].x - dispLms[hi][i].x
-            const dy = lms[hi][i].y - dispLms[hi][i].y
-            sq += dx * dx + dy * dy
-          }
-          const alpha = 0.25 + 0.65 * Math.min(1, Math.sqrt(sq / 21) / 0.010)
-          for (let i = 0; i < 21; i++) {
-            dispLms[hi][i].x = alpha * lms[hi][i].x + (1 - alpha) * dispLms[hi][i].x
-            dispLms[hi][i].y = alpha * lms[hi][i].y + (1 - alpha) * dispLms[hi][i].y
-            dispLms[hi][i].z = alpha * lms[hi][i].z + (1 - alpha) * dispLms[hi][i].z
-          }
-        }
-      }
-
+      // 렌더 스무딩은 detect() RAF 루프에서 매 프레임 수행 → 추론 fps와 무관하게 60fps로 추종.
+      // (여기서 1회만 적용하면 추론 fps가 그대로 끊김 fps가 됨)
       if (lms.length === 0) {
         if (wasPinching) { handState.snap = true; wasPinching = false }
         lastX = null; lastZoomDist = null; lastIndexY = null; tapFired = false; lastScrollMidY = null
@@ -659,6 +663,12 @@ export default function HandTracker() {
         startVideoFramePipeline()  // 이미 스트림이 있으면 즉시 시작
       } else if (e.data.type === 'RESULT') {
         onWorkerResult(e.data)
+      } else if (e.data.type === 'PERF') {
+        perf.delegate = e.data.delegate
+        perf.infMs    = e.data.infMs
+        perf.fps      = e.data.fps
+        perf.inputW   = e.data.inputW
+        paintPerf()
       } else if (e.data.type === 'ERROR') {
         console.error('[HandTracker] Worker init error:', e.data.error)
         workerBusy = false
@@ -688,6 +698,14 @@ export default function HandTracker() {
     function detect(ts) {
       rafId = requestAnimationFrame(detect)
 
+      // 렌더 fps 측정 (0.5s 윈도우)
+      rfFrames++
+      if (ts - rfLastMs >= 500) {
+        perf.renderFps = Math.round((rfFrames * 1000) / (ts - rfLastMs))
+        rfFrames = 0; rfLastMs = ts
+        paintPerf()
+      }
+
       // 60fps 캔버스 렌더링: 이전↔현재 랜드마크 사이를 보간하여 부드러운 스켈레톤
       const canvas = canvasRef.current
       if (canvas) {
@@ -696,6 +714,35 @@ export default function HandTracker() {
         if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H }
         const ctx = canvas.getContext('2d')
         ctx.clearRect(0, 0, W, H)
+
+        // 렌더 스무딩(60fps EMA) — 최신 추론 결과(curLms)를 매 RAF 프레임 목표로 추종.
+        // 추론이 저fps로 들어와도 화면 좌표는 매 프레임 갱신되어 끊김 없이 부드럽게 이동.
+        const cl = curLms
+        if (!cl || cl.length === 0) {
+          dispLms = null
+        } else if (!dispLms || dispLms.length !== cl.length) {
+          dispLms = cl.map(h => h.map(p => ({ x: p.x, y: p.y, z: p.z })))
+        } else {
+          const dt = Math.min(50, Math.max(1, ts - smoothPrevTs))
+          for (let hi = 0; hi < cl.length; hi++) {
+            let sq = 0
+            for (let i = 0; i < 21; i++) {
+              const dx = cl[hi][i].x - dispLms[hi][i].x
+              const dy = cl[hi][i].y - dispLms[hi][i].y
+              sq += dx * dx + dy * dy
+            }
+            // 정지 시 느슨(안정), 이동 시 빠른 추종. dt 보정으로 RAF 변동에도 일관된 속도.
+            const base  = 0.12 + 0.55 * Math.min(1, Math.sqrt(sq / 21) / 0.012)
+            const alpha = 1 - Math.pow(1 - base, dt / 16.67)
+            for (let i = 0; i < 21; i++) {
+              dispLms[hi][i].x += alpha * (cl[hi][i].x - dispLms[hi][i].x)
+              dispLms[hi][i].y += alpha * (cl[hi][i].y - dispLms[hi][i].y)
+              dispLms[hi][i].z += alpha * (cl[hi][i].z - dispLms[hi][i].z)
+            }
+          }
+        }
+        smoothPrevTs = ts
+
         if (drawState && dispLms) {
           const isDark = document.documentElement.classList.contains('dark')
           drawFrame(ctx, W, H, isDark, dispLms, drawState)
@@ -741,6 +788,7 @@ export default function HandTracker() {
 
     return () => {
       cancelAnimationFrame(rafId)
+      window.removeEventListener('keydown', onPerfKey)
       worker.terminate()
       videoRef.current?.srcObject?.getTracks().forEach(t => t.stop())
       Object.assign(handState, {
@@ -755,6 +803,7 @@ export default function HandTracker() {
     <>
       <video ref={videoRef} style={{ display: 'none' }} playsInline muted />
       <canvas ref={canvasRef} className="hand-canvas" />
+      <div ref={perfRef} className="hand-perf" />
     </>
   )
 }

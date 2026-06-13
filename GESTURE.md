@@ -132,9 +132,12 @@
 |---|---|
 | 검출 방식 | `MediaStreamTrackProcessor` + `VideoFrame` — 워커가 카메라 스트림 직접 pull |
 | 버퍼 크기 | `maxBufferSize: 1` — 추론 중 쌓인 프레임 자동 폐기, 항상 최신 프레임 처리 |
+| 에셋 로딩 | `public/mediapipe/` 로컬 번들 (WASM·vision_bundle·hand_landmarker 모델) — CDN 미사용, 워커가 `self.location` 기준 base 자동 산출 |
+| 델리게이트 | GPU 우선. 추론 중앙값 `> 45ms`(30프레임 윈도우) 또는 연속 오류 시 **CPU 자동 강등** — 에러 없이 느려지는 GPU 케이스 대응 |
+| 입력 해상도 | VideoFrame 원본 그대로; CPU 강등 후 여전히 느리면 `224 → 192px` 단계 다운스케일(정규화 좌표라 보정 불필요) / 폴백 경로 320 × 240 |
 | 폴백 | `MediaStreamTrackProcessor` 미지원 시 `ImageBitmap` postMessage 방식 사용 |
-| 렌더링 | RAF 60fps 독립 — 외삽(extrapolation)으로 검출 지연 보상, `lerpBuf` 프리할당 |
-| 입력 해상도 | 320 × 240 (OffscreenCanvas, 폴백 경로만 해당) |
+| 렌더링 | RAF 60fps 독립 — **매 프레임 EMA 스무딩**으로 추론 fps와 무관하게 부드럽게 추종(속도 기반 α + `dt` 보정). 추론 콜백이 아닌 렌더 루프에서 수행 |
+| 성능 HUD | 화면 좌하단, **`P` 키 토글**(localStorage 저장) — `델리게이트 · 추론ms(fps) · 입력px · 렌더fps` 표시 |
 
 ---
 
