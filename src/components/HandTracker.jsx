@@ -434,6 +434,7 @@ export default function HandTracker() {
               if (rs.startPalmFacing) {
                 const dir = side === 'Right' ? 1 : -1
                 handState.rotDx = dir * ROT_IMPULSE
+                handState.rotPulse++   // 튜토리얼 등에서 롤 발동을 놓치지 않고 감지 (rotDx는 캐러셀이 소비)
                 rs.cooldown = ROT_COOLDOWN
                 ds.rotArc = { handIdx: gestureOrigIdx[hi], side }
               }

@@ -136,6 +136,16 @@ export default function Carousel() {
     function tick() {
       if (!drag) { vel = 0 }
 
+      // 외부 신호(튜토리얼 종료 등)로 dismiss·zoom 상태를 깔끔히 복원
+      if (handState.resetView) {
+        dismissed = false; dismissDir = null
+        dismissTarget = 0; dismissTargetX = 0; dismissY = 0; dismissX = 0
+        dismissDragStartY = null; dismissDragStartX = null
+        zoomLevel = 1; zoomVel = 0
+        handState.dismissed = false; handState.dismissDir = null
+        handState.resetView = false
+      }
+
       // 카드가 화면 밖에 있을 때 일반 제스처 억제 (dismiss 드래그는 허용)
       const H = window.innerHeight
       const W = window.innerWidth

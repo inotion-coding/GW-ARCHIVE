@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import handState from '../utils/handState'
+import { tutorial } from '../utils/tutorialStore'
 import '../styles/welcome-page.css'
 
 // 제스처 튜토리얼 항목 — GESTURE.md 명세 기반
@@ -82,6 +83,12 @@ function GestureIcon({ name }) {
 export default function WelcomePage() {
   const navigate = useNavigate()
 
+  // 튜토리얼 시작 → 메인 화면으로 이동해 단계별 가이드(TutorialOverlay) 진행
+  function startTutorial() {
+    tutorial.start()
+    navigate('/')
+  }
+
   // 제스처: 더블탭 뒤로가기 + 핀치 스크롤
   useEffect(() => {
     let rafId
@@ -119,6 +126,10 @@ export default function WelcomePage() {
             검지로 톡 눌러 일정·캘린더·날씨·세계시계·D-Day·문서 등을 열어보세요.
             아래 제스처를 익히면 모든 화면을 손으로 다룰 수 있습니다.
           </p>
+          <button className="wel-start" onClick={startTutorial}>
+            ▶ 튜토리얼 시작 — 메인 화면에서 직접 해보기
+          </button>
+          <span className="wel-start-note">버튼을 누르면 메인 화면에서 7개 제스처를 차례로 안내합니다.</span>
         </section>
 
         {/* ── 제스처 튜토리얼 ── */}

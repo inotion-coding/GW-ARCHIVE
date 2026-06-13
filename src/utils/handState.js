@@ -18,6 +18,8 @@ const handState = {
   zoomMidY:       0,       // 양손 핀치 중심 Y 평균 (0~1)
   back:        false,  // 더블탭 → 이전 페이지 트리거
   rotDx:       0,      // 손 회전: 오른손(+), 왼손(−) → 연속 스크롤 속도
+  rotPulse:    0,      // 롤 발동 시마다 +1 (소비되지 않는 단조 카운터 — 튜토리얼 감지용)
+  resetView:   false,  // true 설정 시 Carousel이 dismiss·zoom 상태를 초기화 (튜토리얼 종료 등)
   dragging:    false,  // 마우스/터치 드래그 중 (회전 제스처 차단용)
   dismissDrag:  0,      // 양손 엄지+중지 수직 드래그 (양수=아래, 음수=위, 정규화 0~1)
   dismissDragX:       0,      // 단일 손 3핀치 수평 드래그 (양수=오른쪽, 음수=왼쪽, 정규화 0~1)

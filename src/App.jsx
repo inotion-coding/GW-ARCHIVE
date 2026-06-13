@@ -5,6 +5,7 @@ import Carousel from './components/Carousel'
 import FileViewer from './components/FileViewer'
 import Footer from './components/Footer'
 import HandTracker from './components/HandTracker'
+import TutorialOverlay from './components/TutorialOverlay'
 import MotionPage from './pages/MotionPage'
 import FileViewerPage from './pages/FileViewerPage'
 import CalendarPage from './pages/CalendarPage'
@@ -22,6 +23,7 @@ export default function App() {
     <>
       <Intro />
       <HandTracker />
+      <TutorialOverlay />
       <Routes>
         <Route path="/" element={
           <>

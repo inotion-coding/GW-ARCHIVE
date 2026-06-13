@@ -15,6 +15,7 @@
 | `snap` | boolean | 핀치 해제 시 가장 가까운 카드로 스냅 트리거 |
 | `zoomDelta` | number | 양손 줌 프레임당 변화량 |
 | `rotDx` | number | 손 회전 임펄스 속도 (FRIC=0.97 기준 정확히 5 카드 이동) |
+| `rotPulse` | number | 롤 발동 시마다 +1 — 소비되지 않는 단조 카운터 (튜토리얼 등 단발 감지용) |
 | `click` | boolean | 검지 탭 클릭 트리거 |
 | `clickX` / `clickY` | number | 클릭 시 검지 끝 좌표 (미러, 0~1) |
 | `pinchMidX` / `pinchMidY` | number | 엄지+중지 핀치 중심 좌표 (미러, 0~1) — activePinch 시 유효 |
@@ -32,6 +33,7 @@
 | `leftLocked` / `rightLocked` | boolean | 손별 잠금 상태 (기본값: true) |
 | `leftLockProgress` / `rightLockProgress` | number | 잠금 게이지 진행률 0~1 |
 | `leftLockFlash` / `rightLockFlash` | `'lock'`\|`'unlock'`\|null | 토글 시 UI 플래시 신호 |
+| `resetView` | boolean | true 설정 시 Carousel이 dismiss·zoom 상태를 초기화 (튜토리얼 종료 등 외부 신호) |
 
 ---
 

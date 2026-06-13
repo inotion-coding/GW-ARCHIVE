@@ -1,0 +1,170 @@
+/* 인터랙티브 튜토리얼 코치 오버레이 — App 전역, 화면 전환에도 유지 */
+.tut-root {
+  position: fixed;
+  inset: 0;
+  z-index: 9990;
+  pointer-events: none;   /* 제스처를 가리지 않음 — 버튼만 클릭 허용 */
+}
+
+/* ── 상단 배너 ── */
+.tut-banner {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(540px, calc(100vw - 40px));
+  padding: 16px 20px 14px;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+  animation: tut-drop 0.28s ease;
+}
+@keyframes tut-drop {
+  from { opacity: 0; transform: translate(-50%, -10px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.tut-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.tut-step {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text);
+  opacity: 0.45;
+}
+.tut-dots { display: flex; gap: 6px; }
+.tut-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  border: 1px solid var(--text);
+  opacity: 0.3;
+  transition: opacity 0.2s, background-color 0.2s;
+}
+.tut-dot.done { background: var(--text); opacity: 0.55; }
+.tut-dot.cur  { opacity: 1; background: var(--text); transform: scale(1.18); }
+
+.tut-title {
+  display: block;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  opacity: 0.95;
+}
+.tut-hint {
+  margin: 7px 0 0;
+  font-size: 12.5px;
+  line-height: 1.7;
+  letter-spacing: 0.01em;
+  color: var(--text);
+  opacity: 0.62;
+}
+.tut-hint--warn { opacity: 0.85; color: #c8923a; }
+
+.tut-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+}
+.tut-mech {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text);
+  opacity: 0.4;
+}
+.tut-actions { display: flex; gap: 8px; pointer-events: auto; }
+.tut-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  padding: 6px 12px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.14s, border-color 0.14s, background-color 0.14s;
+}
+.tut-btn:hover { opacity: 1; border-color: var(--text); }
+.tut-btn--primary {
+  opacity: 0.95;
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+}
+.tut-btn--primary:hover { opacity: 1; }
+
+/* ── 성공 ✓ 플래시 ── */
+.tut-flash {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 120px;
+  line-height: 1;
+  color: #4fc77a;
+  text-shadow: 0 4px 24px rgba(80, 220, 120, 0.45);
+  animation: tut-pop 0.82s ease forwards;
+  pointer-events: none;
+}
+@keyframes tut-pop {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+  25%  { opacity: 1; transform: translate(-50%, -50%) scale(1.05); }
+  70%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.1); }
+}
+
+/* ── 완료 카드 ── */
+.tut-done {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(420px, calc(100vw - 40px));
+  padding: 36px 32px 28px;
+  text-align: center;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+  pointer-events: auto;
+  animation: tut-drop-c 0.3s ease;
+}
+@keyframes tut-drop-c {
+  from { opacity: 0; transform: translate(-50%, -46%); }
+  to   { opacity: 1; transform: translate(-50%, -50%); }
+}
+.tut-done-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  border: 1.5px solid #4fc77a;
+  color: #4fc77a;
+  font-size: 26px;
+  margin-bottom: 16px;
+}
+.tut-done-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text);
+}
+.tut-done-desc {
+  margin: 10px 0 22px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--text);
+  opacity: 0.6;
+}
+.tut-done .tut-actions { justify-content: center; }

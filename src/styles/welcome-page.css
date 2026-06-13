@@ -70,6 +70,32 @@
   opacity: 0.5;
 }
 
+/* ── 튜토리얼 시작 CTA ── */
+.wel-start {
+  display: inline-block;
+  margin: 28px auto 0;
+  background: var(--text);
+  color: var(--bg);
+  border: 1px solid var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  padding: 13px 26px;
+  cursor: pointer;
+  opacity: 0.92;
+  transition: opacity 0.14s, transform 0.14s;
+}
+.wel-start:hover { opacity: 1; transform: translateY(-1px); }
+.wel-start:active { transform: translateY(0); }
+.wel-start-note {
+  display: block;
+  margin-top: 12px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text);
+  opacity: 0.4;
+}
+
 /* ── 제스처 섹션 ── */
 .wel-section {
   max-width: 980px;
