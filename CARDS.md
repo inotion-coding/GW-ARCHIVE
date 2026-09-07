@@ -26,7 +26,7 @@
 | 5 | 5 | World Clock | `#b0c0c8` | 청회색 추상 (3D 추상) |
 | 6 | 6 | Megastudy | `#c0b8c0` | 흰색 클레이 블롭 (3D 추상) |
 | 7 | 7 | D-Day | `#c8c0b0` | 흰색 물결 능선 조형 (3D 추상) |
-| 8 | 8 | Placeholder 3 | `#b8b0b0` | 라벤더·옐로 파스텔 구체 (3D 추상) |
+| 8 | 8 | Downloads | `#b8b0b0` | 라벤더·옐로 파스텔 구체 (3D 추상) |
 | 9 | 9 | Placeholder 4 | `#a8b8a8` | 흰 모래 물결 질감 (3D 추상) |
 | 10 | 10 | Documents | `#c0c8b0` | 블랙 광택 조형물 (3D 추상) |
 
@@ -73,9 +73,17 @@
 - **설명**: 가장 임박한 D-day를 대형으로 표시하고, 등록된 D-day들을 가까운 순으로 정렬. 지난 일정은 `D+N`으로 표기. 제목+목표일 폼으로 추가/삭제하며 `src/data/ddayStore.js`를 통해 localStorage 영속. DdayPage(`/motion/7`)로 라우팅.
 - **상태**: 구현 완료
 
-### Card 8 — Placeholder 3
-- **주제**: 미정
-- **상태**: 콘텐츠 미구현
+### Card 8 — Downloads
+- **주제**: PDF 파일 다운로드 (임시)
+- **설명**: `public/docs/`에 배치된 PDF 3종을 내려받는 페이지. 파일별 개별 다운로드 버튼과 「전체 다운로드」 버튼 제공. DownloadsPage(`/motion/8`)로 라우팅.
+- **파일 목록** (실제 경로 → 저장 파일명)
+  | public 경로 | 저장 파일명 |
+  |---|---|
+  | `docs/proposal-application.pdf` | 제안신청서.pdf |
+  | `docs/proposal-description.pdf` | 제안설명서.pdf |
+  | `docs/privacy-consent.pdf` | 개인정보동의서.pdf |
+- **구현 메모**: 경로는 `import.meta.env.BASE_URL` 기준(배포 base `/GW-ARCHIVE/`). 한글 파일명 URL 인코딩 이슈를 피하려 파일은 ASCII명으로 두고 `<a download>` 속성으로 한글명 저장. 전체 다운로드는 브라우저의 연속 다운로드 차단을 피하려 400ms 간격 실행.
+- **상태**: 구현 완료 (임시 콘텐츠)
 
 ### Card 9 — Placeholder 4
 - **주제**: 미정
@@ -95,4 +103,4 @@
 
 ---
 
-**Last Updated**: 2026-06-12 (Card 5 → World Clock, Card 7 → D-Day 구
+**Last Updated**: 2026-09-07 (Card 8 → Downloads 구현)

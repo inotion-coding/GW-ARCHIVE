@@ -15,6 +15,7 @@ import WeatherPage from './pages/WeatherPage'
 import ClockPage from './pages/ClockPage'
 import DdayPage from './pages/DdayPage'
 import WelcomePage from './pages/WelcomePage'
+import DownloadsPage from './pages/DownloadsPage'
 import CalendarView from './components/CalendarView'
 import './styles/motion-page.css'
 
@@ -43,6 +44,7 @@ export default function App() {
         <Route path="/motion/7"   element={<DdayPage />} />
         <Route path="/motion/2"   element={<SchedulePage />} />
         <Route path="/motion/3"   element={<CalendarPage />} />
+        <Route path="/motion/8"   element={<DownloadsPage />} />
         <Route path="/motion/10"  element={<FileViewerPage />} />
         <Route path="/motion/:id" element={<MotionPage />} />
       </Routes>

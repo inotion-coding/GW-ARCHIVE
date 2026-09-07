@@ -6,7 +6,7 @@ export const CARDS = [
   { id: 5,  title: 'World Clock',    img: 'https://plus.unsplash.com/premium_photo-1673603988651-99f79e4ae7d3?w=600',  color: '#b0c0c8' },
   { id: 6,  title: 'Megastudy',     img: 'https://plus.unsplash.com/premium_photo-1754244539367-3d742e594667?w=600', color: '#c0b8c0' },
   { id: 7,  title: 'D-Day',         img: 'https://plus.unsplash.com/premium_photo-1759587042034-46b72737b806?w=600', color: '#c8c0b0' },
-  { id: 8,  title: 'Placeholder 3', img: 'https://images.unsplash.com/photo-1743398665751-2cd5d3cc9d46?w=600',       color: '#b8b0b0' },
+  { id: 8,  title: 'Downloads',     img: 'https://images.unsplash.com/photo-1743398665751-2cd5d3cc9d46?w=600',       color: '#b8b0b0' },
   { id: 9,  title: 'Placeholder 4', img: 'https://plus.unsplash.com/premium_photo-1681426615892-e359509fe370?w=600', color: '#a8b8a8' },
   { id: 10, title: 'Documents',     img: 'https://plus.unsplash.com/premium_photo-1681426455411-4ce0d277d138?w=600', color: '#c0c8b0' },
 ]
